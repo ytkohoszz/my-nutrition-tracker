@@ -1,5 +1,5 @@
 /* ============================================================
-   Питание и БЖУ (my-nutrition-tracker v0.1.2)
+   Питание и БЖУ (my-nutrition-tracker v0.1.3)
    Шкала отступов: 4 / 8 / 12 / 16 px
    Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
    ============================================================ */
@@ -332,7 +332,7 @@ button.my-nt-suggest-item.is-active {
   color: var(--text-muted);
 }
 
-/* ---------- Единая карточка выбранного продукта ---------- */
+/* ---------- Карточка выбранного продукта и одно поле граммов ---------- */
 .my-nt-portion-box {
   padding: 10px 12px;
   border-radius: 10px;
@@ -409,7 +409,7 @@ button.my-nt-icon-btn.is-danger {
   font-weight: 600 !important;
 }
 
-.my-nt-portion-top {
+.my-nt-gram-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -417,37 +417,15 @@ button.my-nt-icon-btn.is-danger {
   gap: var(--my-nt-s2);
 }
 
-.my-nt-portion-preview {
-  font-size: var(--my-nt-fs-xs);
-  font-weight: 600;
-  color: var(--interactive-accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.my-nt-stepper-row {
-  display: flex;
+.my-nt-gram-label {
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--my-nt-s2);
-}
-
-button.my-nt-step-btn {
-  min-width: 48px !important;
-  height: var(--my-nt-hit) !important;
-  min-height: var(--my-nt-hit) !important;
-  padding: 0 10px !important;
-  border-radius: 8px !important;
-  font-size: var(--my-nt-fs-sm) !important;
-  font-weight: 600 !important;
-  background: var(--background-secondary) !important;
-  border: 1px solid var(--background-modifier-border) !important;
-  color: var(--text-normal) !important;
-  box-shadow: none !important;
-  cursor: pointer;
+  margin: 0;
 }
 
 .my-nt-step-input {
-  width: 86px !important;
+  width: 100px !important;
   height: var(--my-nt-hit) !important;
   text-align: center;
   font-size: 1rem !important;
@@ -456,11 +434,11 @@ button.my-nt-step-btn {
   border-radius: 8px !important;
 }
 
-.my-nt-quick-Portions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-left: auto;
+.my-nt-portion-preview {
+  font-size: var(--my-nt-fs-xs);
+  font-weight: 600;
+  color: var(--interactive-accent);
+  font-variant-numeric: tabular-nums;
 }
 
 button.my-nt-btn {
@@ -529,7 +507,7 @@ button.my-nt-primary-btn {
 }
 
 .my-nt-field-caption {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-muted);
 }

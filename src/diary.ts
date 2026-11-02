@@ -8,10 +8,6 @@ import {
   NutritionPluginSettings,
 } from "./types";
 
-/**
- * Формат строки приёма пищи в разделе `## Питание` (только граммы, но старые строки со скобками тоже парсятся):
- * - 09:30 · Сырники творожные · 180 г · 333 ккал · Б: 26.1 · Ж: 13.5 · У: 27
- */
 const MEAL_LINE_REGEX =
   /^-\s*(?:(\d{2}:\d{2})\s*·\s*)?(.+?)\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*г(?:\s*\([^)]*\))?\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*ккал\s*·\s*Б:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*Ж:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*У:\s*([0-9]+(?:[.,][0-9]+)?)\s*$/i;
 
@@ -93,7 +89,9 @@ export function findDiaryFileForDate(
   for (const f of app.vault.getMarkdownFiles()) {
     if (!f.path.startsWith(prefix)) continue;
     const fm = app.metadataCache.getFileCache(f)?.frontmatter;
-    if (fm && extractISODate(fm[DIARY_KEYS.date]) === dateISO) {
+    const byFm = fm && extractISODate(fm[DIARY_KEYS.date]) === dateISO;
+    const byName = f.basename === dateISO;
+    if (byFm || byName) {
       if (!bestMatch || f.stat.mtime > bestMatch.stat.mtime) {
         bestMatch = f;
       }
@@ -101,6 +99,21 @@ export function findDiaryFileForDate(
   }
   return bestMatch;
 }
+
+const MONTHS_RU: readonly string[] = [
+  "январь",
+  "февраль",
+  "март",
+  "апрель",
+  "май",
+  "июнь",
+  "июль",
+  "август",
+  "сентябрь",
+  "октябрь",
+  "ноябрь",
+  "декабрь",
+];
 
 export async function getOrCreateDiaryFile(
   app: App,
@@ -110,12 +123,39 @@ export async function getOrCreateDiaryFile(
   const found = findDiaryFileForDate(app, settings, dateISO);
   if (found) return found;
 
-  const folder = normalizePath(settings.diaryFolder || "Ежедневник").replace(
-    /\/+$/,
-    ""
-  );
-  await ensureFolder(app, folder);
-  const targetPath = normalizePath(`${folder}/${dateISO}.md`);
+  const baseFolder = normalizePath(
+    settings.diaryFolder || "Ежедневник"
+  ).replace(/\/+$/, "");
+
+  // Проверяем, используются ли в папке Ежедневник подпапки вида ГГГГ/ММ - месяц
+  const prefix = `${baseFolder}/`;
+  const usesNestedYearMonth = app.vault
+    .getMarkdownFiles()
+    .some(
+      (f) =>
+        f.path.startsWith(prefix) &&
+        /\/\d{4}\/\d{2}\s*-\s*[^/]+\/\d{4}-\d{2}-\d{2}\.md$/i.test(f.path)
+    );
+
+  let targetFolder = baseFolder;
+  const parts = dateISO.split("-");
+  const yyyy = parts[0];
+  const mm = parts[1];
+  const mIdx = mm ? Number(mm) - 1 : -1;
+  if (
+    usesNestedYearMonth &&
+    yyyy &&
+    mm &&
+    mIdx >= 0 &&
+    mIdx < MONTHS_RU.length
+  ) {
+    targetFolder = normalizePath(
+      `${baseFolder}/${yyyy}/${mm} - ${MONTHS_RU[mIdx]}`
+    );
+  }
+
+  await ensureFolder(app, targetFolder);
+  const targetPath = normalizePath(`${targetFolder}/${dateISO}.md`);
   const content = [
     "---",
     `${DIARY_KEYS.date}: "${dateISO}"`,
@@ -219,11 +259,6 @@ export function formatMealMarkdownLine(entry: {
   return `- ${entry.timeStr} · ${entry.name} · ${round1(entry.grams)} г · ${Math.round(entry.kcal)} ккал · Б: ${round1(entry.protein)} · Ж: ${round1(entry.fat)} · У: ${round1(entry.carbs)}`;
 }
 
-/**
- * Пересчитывает сумму приёмов пищи из раздела `## Питание` и записывает числа в YAML через processFrontMatter.
- * Если дневная цель калорий задана (> 0), обновляет флаг `диета: true/false`.
- * Если цель удалена (null), поле `диета` не принуждается.
- */
 export async function syncMacrosToDiaryFrontmatter(
   app: App,
   settings: NutritionPluginSettings,
