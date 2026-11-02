@@ -5,7 +5,6 @@ import {
   DailyMacrosSummary,
   FoodItem,
   LoggedMealEntry,
-  PortionMode,
 } from "./types";
 import {
   appendMealToDiary,
@@ -14,6 +13,7 @@ import {
   formatDateRu,
   parseMealsFromDiaryContent,
   sumDailyMacros,
+  syncMacrosToDiaryFrontmatter,
   todayLocalISO,
 } from "./diary";
 
@@ -32,9 +32,14 @@ export class NutritionTrackerModal extends Modal {
 
   private searchQuery = "";
   private selectedFoodId = "";
-  private portionMode: PortionMode = "grams";
   private gramsInputVal = 100;
-  private piecesInputVal = 2;
+
+  // Редактирование или удаление дневной цели калорий прямо из окна
+  private isEditingGoal = false;
+  private goalDraftStr = "";
+
+  // Подтверждение удаления продукта из базы
+  private confirmDeleteFoodId: string | null = null;
 
   private isCreateFoodOpen = false;
   private editingFoodId: string | null = null;
@@ -44,8 +49,7 @@ export class NutritionTrackerModal extends Modal {
     proteinPer100: "",
     fatPer100: "",
     carbsPer100: "",
-    pieceGrams: "",
-    pieceLabel: "шт.",
+    defaultGrams: "100",
     isFavorite: true,
   };
 
@@ -111,33 +115,11 @@ export class NutritionTrackerModal extends Modal {
 
   private selectFood(food: FoodItem, rerender = true): void {
     this.selectedFoodId = food.id;
-    if (food.pieceGrams && food.pieceGrams > 0) {
-      this.portionMode = "pieces";
-      const approxPieces = Math.max(
-        1,
-        Math.round((food.defaultGrams || food.pieceGrams) / food.pieceGrams)
-      );
-      this.piecesInputVal = approxPieces;
-      this.gramsInputVal = round1(approxPieces * food.pieceGrams);
-    } else {
-      this.portionMode = "grams";
-      this.gramsInputVal = food.defaultGrams || 100;
-    }
+    this.confirmDeleteFoodId = null;
+    this.gramsInputVal = food.defaultGrams || 100;
     if (rerender) {
       void this.refreshAll();
     }
-  }
-
-  private getEffectiveGrams(food: FoodItem | undefined): number {
-    if (!food) return Math.max(1, this.gramsInputVal || 100);
-    if (
-      this.portionMode === "pieces" &&
-      food.pieceGrams &&
-      food.pieceGrams > 0
-    ) {
-      return round1(Math.max(0.5, this.piecesInputVal) * food.pieceGrams);
-    }
-    return round1(Math.max(1, this.gramsInputVal));
   }
 
   private calculatePortionMacros(
@@ -186,7 +168,7 @@ export class NutritionTrackerModal extends Modal {
     }
 
     this.renderHeader(diaryFile);
-    this.renderSummary(totals);
+    this.renderSummary(totals, diaryFile, loggedEntries);
     this.renderAdder();
     this.renderLoggedMeals(loggedEntries, diaryFile);
   }
@@ -203,7 +185,7 @@ export class NutritionTrackerModal extends Modal {
     titleWrap.createDiv({
       cls: "my-nt-subtitle",
       text: diaryFile
-        ? `Запись в ${diaryFile.path} (YAML + раздел «## Питание»)`
+        ? `Запись в ${diaryFile.path}`
         : `При первом добавлении будет создана заметка Ежедневник/${this.dateISO}.md`,
     });
 
@@ -220,12 +202,17 @@ export class NutritionTrackerModal extends Modal {
     }
   }
 
-  private renderSummary(totals: DailyMacrosSummary): void {
+  private renderSummary(
+    totals: DailyMacrosSummary,
+    diaryFile: ReturnType<typeof findDiaryFileForDate>,
+    loggedEntries: LoggedMealEntry[]
+  ): void {
     this.summaryEl.empty();
 
-    const goal = Math.max(500, this.plugin.settings.dailyCalorieGoal || 2600);
-    const pct = Math.min(100, Math.round((totals.kcal / goal) * 100));
-    const isGoalReached = totals.kcal >= goal;
+    const rawGoal = this.plugin.settings.dailyCalorieGoal;
+    const goal =
+      typeof rawGoal === "number" && rawGoal > 0 ? Math.round(rawGoal) : null;
+    const isGoalReached = goal !== null && totals.kcal >= goal;
 
     const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
     const leftKcal = kcalRow.createDiv();
@@ -233,33 +220,127 @@ export class NutritionTrackerModal extends Modal {
       cls: "my-nt-kcal-big" + (isGoalReached ? " is-done" : ""),
       text: `${totals.kcal} ккал`,
     });
-    leftKcal.createSpan({
-      cls: "my-nt-kcal-goal",
-      text: ` из ${goal} ккал (${pct}%)`,
-    });
 
-    kcalRow.createSpan({
-      cls: "my-nt-diet-badge" + (isGoalReached ? " is-done" : ""),
-      text: isGoalReached
-        ? `✓ Привычка «Диета» закрыта (≥${goal})`
-        : `До цели: ${Math.max(0, goal - totals.kcal)} ккал`,
-    });
+    if (goal !== null) {
+      const pct = Math.min(100, Math.round((totals.kcal / goal) * 100));
+      leftKcal.createSpan({
+        cls: "my-nt-kcal-goal",
+        text: ` из ${goal} ккал (${pct}%)`,
+      });
+    } else {
+      leftKcal.createSpan({
+        cls: "my-nt-kcal-goal",
+        text: " · без дневной цели",
+      });
+    }
 
-    const track = this.summaryEl.createDiv("my-nt-progress-track");
-    const fill = track.createDiv(
-      "my-nt-progress-fill" + (isGoalReached ? " is-done" : "")
-    );
-    fill.style.width = `${pct}%`;
+    const rightControls = kcalRow.createDiv("my-nt-goal-controls");
+    if (goal !== null) {
+      rightControls.createSpan({
+        cls: "my-nt-diet-badge" + (isGoalReached ? " is-done" : ""),
+        text: isGoalReached
+          ? `✓ Диета закрыта (≥${goal})`
+          : `Осталось: ${Math.max(0, goal - totals.kcal)} ккал`,
+      });
+    }
+
+    const editGoalBtn = rightControls.createEl("button", {
+      cls: "my-nt-btn" + (this.isEditingGoal ? " is-active" : ""),
+      text: goal !== null ? "✎ Цель" : "＋ Задать цель",
+      attr: {
+        type: "button",
+        title: "Изменить или удалить дневную цель калорий",
+      },
+    });
+    editGoalBtn.onclick = () => {
+      this.isEditingGoal = !this.isEditingGoal;
+      this.goalDraftStr = goal !== null ? String(goal) : "2600";
+      this.renderSummary(totals, diaryFile, loggedEntries);
+    };
+
+    if (this.isEditingGoal) {
+      const goalDrawer = this.summaryEl.createDiv("my-nt-goal-drawer");
+      goalDrawer.createSpan({
+        cls: "my-nt-field-caption",
+        text: "Дневная цель (ккал):",
+      });
+      const gInp = goalDrawer.createEl("input", {
+        cls: "my-nt-goal-input",
+        attr: {
+          type: "number",
+          inputmode: "numeric",
+          min: "100",
+          max: "15000",
+          step: "50",
+          placeholder: "Напр. 2600",
+          value: this.goalDraftStr,
+        },
+      });
+      gInp.oninput = () => {
+        this.goalDraftStr = gInp.value;
+      };
+
+      const saveGoalBtn = goalDrawer.createEl("button", {
+        cls: "mod-cta my-nt-btn",
+        text: "✓ Сохранить цель",
+        attr: { type: "button" },
+      });
+      saveGoalBtn.onclick = async () => {
+        const parsed = Math.round(Number(this.goalDraftStr.trim()));
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          new Notice("Введи число больше 0 или нажми «Убрать цель».");
+          return;
+        }
+        this.plugin.settings.dailyCalorieGoal = parsed;
+        this.plugin.requestSaveSettings();
+        this.isEditingGoal = false;
+        if (diaryFile && loggedEntries.length > 0) {
+          await syncMacrosToDiaryFrontmatter(
+            this.app,
+            this.plugin.settings,
+            diaryFile,
+            this.dateISO,
+            loggedEntries
+          );
+        }
+        new Notice(`Дневная цель: ${parsed} ккал`);
+        await this.refreshAll();
+      };
+
+      if (goal !== null) {
+        const removeGoalBtn = goalDrawer.createEl("button", {
+          cls: "my-nt-btn is-danger",
+          text: "✕ Убрать цель совсем",
+          attr: { type: "button" },
+        });
+        removeGoalBtn.onclick = async () => {
+          this.plugin.settings.dailyCalorieGoal = null;
+          this.plugin.requestSaveSettings();
+          this.isEditingGoal = false;
+          new Notice("Дневная цель калорий отключена.");
+          await this.refreshAll();
+        };
+      }
+    }
+
+    if (goal !== null) {
+      const pct = Math.min(100, Math.round((totals.kcal / goal) * 100));
+      const track = this.summaryEl.createDiv("my-nt-progress-track");
+      const fill = track.createDiv(
+        "my-nt-progress-fill" + (isGoalReached ? " is-done" : "")
+      );
+      fill.style.width = `${pct}%`;
+    }
 
     const macrosGrid = this.summaryEl.createDiv("my-nt-macros-grid");
-    const addMacroPill = (label: string, val: number, colorCls: string) => {
-      const box = macrosGrid.createDiv(`my-nt-macro-box ${colorCls}`);
+    const addMacroPill = (label: string, val: number) => {
+      const box = macrosGrid.createDiv("my-nt-macro-box");
       box.createSpan({ cls: "my-nt-macro-label", text: label });
       box.createSpan({ cls: "my-nt-macro-val", text: `${val} г` });
     };
-    addMacroPill("Белки", totals.protein, "is-protein");
-    addMacroPill("Жиры", totals.fat, "is-fat");
-    addMacroPill("Углеводы", totals.carbs, "is-carbs");
+    addMacroPill("Белки", totals.protein);
+    addMacroPill("Жиры", totals.fat);
+    addMacroPill("Углеводы", totals.carbs);
   }
 
   private renderAdder(): void {
@@ -279,6 +360,15 @@ export class NutritionTrackerModal extends Modal {
     newFoodBtn.onclick = () => {
       this.isCreateFoodOpen = !this.isCreateFoodOpen;
       this.editingFoodId = null;
+      this.newFoodDraft = {
+        name: "",
+        kcalPer100: "",
+        proteinPer100: "",
+        fatPer100: "",
+        carbsPer100: "",
+        defaultGrams: "100",
+        isFavorite: true,
+      };
       this.renderAdder();
     };
 
@@ -293,18 +383,20 @@ export class NutritionTrackerModal extends Modal {
     const activeFood =
       this.plugin.foodStore.findById(this.selectedFoodId) ?? sortedFoods[0];
 
-    const quickChipsWrap = this.adderEl.createDiv("my-nt-food-chips");
-    for (const f of sortedFoods.slice(0, 12)) {
-      const isSelected = activeFood?.id === f.id;
-      const chip = quickChipsWrap.createEl("button", {
-        cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
-        text: `${f.isFavorite ? "★ " : ""}${f.name}`,
-        attr: {
-          type: "button",
-          title: `${f.kcalPer100} ккал на 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
-        },
-      });
-      chip.onclick = () => this.selectFood(f, true);
+    if (sortedFoods.length > 0) {
+      const quickChipsWrap = this.adderEl.createDiv("my-nt-food-chips");
+      for (const f of sortedFoods.slice(0, 12)) {
+        const isSelected = activeFood?.id === f.id;
+        const chip = quickChipsWrap.createEl("button", {
+          cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
+          text: `${f.isFavorite ? "★ " : ""}${f.name}`,
+          attr: {
+            type: "button",
+            title: `${f.kcalPer100} ккал на 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
+          },
+        });
+        chip.onclick = () => this.selectFood(f, true);
+      }
     }
 
     const selectRow = this.adderEl.createDiv("my-nt-select-row");
@@ -312,12 +404,9 @@ export class NutritionTrackerModal extends Modal {
       cls: "dropdown my-nt-food-select",
     });
     for (const f of this.plugin.foodStore.getSortedFoods()) {
-      const pieceHint = f.pieceGrams
-        ? ` · 1 ${f.pieceLabel || "шт."} = ${f.pieceGrams} г`
-        : "";
       const o = foodSelect.createEl("option", {
         value: f.id,
-        text: `${f.isFavorite ? "★ " : ""}${f.name} (${f.kcalPer100} ккал/100г${pieceHint})`,
+        text: `${f.isFavorite ? "★ " : ""}${f.name} (${f.kcalPer100} ккал / 100 г · Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
       });
       if (activeFood && f.id === activeFood.id) o.selected = true;
     }
@@ -352,53 +441,55 @@ export class NutritionTrackerModal extends Modal {
           proteinPer100: String(activeFood.proteinPer100),
           fatPer100: String(activeFood.fatPer100),
           carbsPer100: String(activeFood.carbsPer100),
-          pieceGrams: activeFood.pieceGrams ? String(activeFood.pieceGrams) : "",
-          pieceLabel: activeFood.pieceLabel || "шт.",
+          defaultGrams: String(activeFood.defaultGrams || 100),
           isFavorite: Boolean(activeFood.isFavorite),
         };
         this.renderAdder();
       };
+
+      const isConfirmingDel = this.confirmDeleteFoodId === activeFood.id;
+      const delFoodBtn = selectRow.createEl("button", {
+        cls: "my-nt-btn" + (isConfirmingDel ? " is-danger" : ""),
+        text: isConfirmingDel ? "Удалить?" : "✕",
+        attr: {
+          type: "button",
+          title: "Удалить этот продукт из базы продуктов",
+        },
+      });
+      delFoodBtn.onclick = () => {
+        if (!isConfirmingDel) {
+          this.confirmDeleteFoodId = activeFood.id;
+          this.renderAdder();
+          return;
+        }
+        const deletedName = activeFood.name;
+        this.plugin.foodStore.deleteFood(activeFood.id);
+        this.confirmDeleteFoodId = null;
+        const nextFirst = this.plugin.foodStore.getSortedFoods()[0];
+        this.selectedFoodId = nextFirst?.id ?? "";
+        if (nextFirst) {
+          this.gramsInputVal = nextFirst.defaultGrams || 100;
+        }
+        new Notice(`Продукт «${deletedName}» удалён из базы.`);
+        this.renderAdder();
+      };
     }
 
-    if (!activeFood) return;
+    if (!activeFood) {
+      this.adderEl.createDiv({
+        cls: "my-nt-empty",
+        text: "В базе пока нет продуктов. Нажми «＋ Свой продукт в базу» выше.",
+      });
+      return;
+    }
 
+    // Блок ввода веса строго в граммах (г)
     const portionBox = this.adderEl.createDiv("my-nt-portion-box");
-    const hasPieceWeight = Boolean(
-      activeFood.pieceGrams && activeFood.pieceGrams > 0
-    );
-
     const portionTop = portionBox.createDiv("my-nt-portion-top");
-    if (hasPieceWeight) {
-      const modeSwitch = portionTop.createDiv("my-nt-mode-seg");
-      const piecesBtn = modeSwitch.createEl("button", {
-        cls:
-          "my-nt-mode-btn" + (this.portionMode === "pieces" ? " is-active" : ""),
-        text: `В штуках (1 ${activeFood.pieceLabel || "шт."} = ${activeFood.pieceGrams} г)`,
-        attr: { type: "button" },
-      });
-      const gramsBtn = modeSwitch.createEl("button", {
-        cls:
-          "my-nt-mode-btn" + (this.portionMode === "grams" ? " is-active" : ""),
-        text: "В граммах (г)",
-        attr: { type: "button" },
-      });
-      piecesBtn.onclick = () => {
-        this.portionMode = "pieces";
-        this.gramsInputVal = round1(
-          this.piecesInputVal * (activeFood.pieceGrams || 100)
-        );
-        this.renderAdder();
-      };
-      gramsBtn.onclick = () => {
-        this.portionMode = "grams";
-        this.renderAdder();
-      };
-    } else {
-      portionTop.createSpan({
-        cls: "my-nt-field-caption",
-        text: "Вес порции в граммах (г):",
-      });
-    }
+    portionTop.createSpan({
+      cls: "my-nt-field-caption",
+      text: "Вес порции в граммах (г):",
+    });
 
     const previewEl = portionTop.createSpan({ cls: "my-nt-portion-preview" });
     const submitBtn = this.adderEl.createEl("button", {
@@ -407,149 +498,88 @@ export class NutritionTrackerModal extends Modal {
     });
 
     const updatePortionPreview = () => {
-      const effGrams = this.getEffectiveGrams(activeFood);
+      const effGrams = round1(Math.max(1, this.gramsInputVal || 100));
       const calc = this.calculatePortionMacros(activeFood, effGrams);
       previewEl.setText(
         `${effGrams} г → ${calc.kcal} ккал (Б: ${calc.protein} · Ж: ${calc.fat} · У: ${calc.carbs})`
       );
       submitBtn.setText(
-        `＋ Записать в дневник: ${activeFood.name} (+${calc.kcal} ккал)`
+        `＋ Записать в дневник: ${activeFood.name} (${effGrams} г · +${calc.kcal} ккал)`
       );
     };
 
-    if (this.portionMode === "pieces" && hasPieceWeight) {
-      const stepRow = portionBox.createDiv("my-nt-stepper-row");
-      const minusBtn = stepRow.createEl("button", {
-        cls: "my-nt-step-btn",
-        text: "−1",
+    const stepRow = portionBox.createDiv("my-nt-stepper-row");
+    const minus25 = stepRow.createEl("button", {
+      cls: "my-nt-step-btn",
+      text: "−25 г",
+      attr: { type: "button" },
+    });
+    const gInp = stepRow.createEl("input", {
+      cls: "my-nt-step-input",
+      attr: {
+        type: "number",
+        inputmode: "decimal",
+        min: "1",
+        step: "10",
+        value: String(this.gramsInputVal),
+      },
+    });
+    const plus25 = stepRow.createEl("button", {
+      cls: "my-nt-step-btn",
+      text: "+25 г",
+      attr: { type: "button" },
+    });
+
+    const quickGrams = stepRow.createDiv("my-nt-quick-Portions");
+    for (const gVal of [30, 50, 100, 150, 200, 250, 300]) {
+      const qb = quickGrams.createEl("button", {
+        cls: "my-nt-btn",
+        text: `${gVal} г`,
         attr: { type: "button" },
       });
-      const pInp = stepRow.createEl("input", {
-        cls: "my-nt-step-input",
-        attr: {
-          type: "number",
-          inputmode: "decimal",
-          min: "0.5",
-          step: "0.5",
-          value: String(this.piecesInputVal),
-        },
-      });
-      const plusBtn = stepRow.createEl("button", {
-        cls: "my-nt-step-btn",
-        text: "+1",
-        attr: { type: "button" },
-      });
-
-      const quickPieces = stepRow.createDiv("my-nt-quick-Portions");
-      for (const cnt of [1, 2, 3, 4, 5]) {
-        const qb = quickPieces.createEl("button", {
-          cls: "my-nt-btn",
-          text: `${cnt} ${activeFood.pieceLabel || "шт."}`,
-          attr: { type: "button" },
-        });
-        qb.onclick = () => {
-          this.piecesInputVal = cnt;
-          pInp.value = String(cnt);
-          updatePortionPreview();
-        };
-      }
-
-      const applyPieces = (nextP: number) => {
-        const clean = Math.max(0.5, round1(nextP));
-        this.piecesInputVal = clean;
-        pInp.value = String(clean);
+      qb.onclick = () => {
+        this.gramsInputVal = gVal;
+        gInp.value = String(gVal);
         updatePortionPreview();
-      };
-      minusBtn.onclick = () => applyPieces((Number(pInp.value) || 1) - 1);
-      plusBtn.onclick = () => applyPieces((Number(pInp.value) || 1) + 1);
-      pInp.oninput = () => {
-        const n = Number(pInp.value.replace(",", "."));
-        if (Number.isFinite(n) && n > 0) {
-          this.piecesInputVal = n;
-          updatePortionPreview();
-        }
-      };
-    } else {
-      const stepRow = portionBox.createDiv("my-nt-stepper-row");
-      const minus25 = stepRow.createEl("button", {
-        cls: "my-nt-step-btn",
-        text: "−25 г",
-        attr: { type: "button" },
-      });
-      const gInp = stepRow.createEl("input", {
-        cls: "my-nt-step-input",
-        attr: {
-          type: "number",
-          inputmode: "decimal",
-          min: "1",
-          step: "10",
-          value: String(this.gramsInputVal),
-        },
-      });
-      const plus25 = stepRow.createEl("button", {
-        cls: "my-nt-step-btn",
-        text: "+25 г",
-        attr: { type: "button" },
-      });
-
-      const quickGrams = stepRow.createDiv("my-nt-quick-Portions");
-      for (const gVal of [50, 100, 150, 200, 250, 300]) {
-        const qb = quickGrams.createEl("button", {
-          cls: "my-nt-btn",
-          text: `${gVal} г`,
-          attr: { type: "button" },
-        });
-        qb.onclick = () => {
-          this.gramsInputVal = gVal;
-          gInp.value = String(gVal);
-          updatePortionPreview();
-        };
-      }
-
-      const applyGrams = (nextG: number) => {
-        const clean = Math.max(5, Math.round(nextG));
-        this.gramsInputVal = clean;
-        gInp.value = String(clean);
-        updatePortionPreview();
-      };
-      minus25.onclick = () => applyGrams((Number(gInp.value) || 100) - 25);
-      plus25.onclick = () => applyGrams((Number(gInp.value) || 100) + 25);
-      gInp.oninput = () => {
-        const n = Number(gInp.value.replace(",", "."));
-        if (Number.isFinite(n) && n > 0) {
-          this.gramsInputVal = n;
-          updatePortionPreview();
-        }
       };
     }
+
+    const applyGrams = (nextG: number) => {
+      const clean = Math.max(1, Math.round(nextG));
+      this.gramsInputVal = clean;
+      gInp.value = String(clean);
+      updatePortionPreview();
+    };
+    minus25.onclick = () => applyGrams((Number(gInp.value) || 100) - 25);
+    plus25.onclick = () => applyGrams((Number(gInp.value) || 100) + 25);
+    gInp.oninput = () => {
+      const n = Number(gInp.value.replace(",", "."));
+      if (Number.isFinite(n) && n > 0) {
+        this.gramsInputVal = n;
+        updatePortionPreview();
+      }
+    };
 
     updatePortionPreview();
 
     submitBtn.onclick = async () => {
       if (submitBtn.disabled) return;
-      const effGrams = this.getEffectiveGrams(activeFood);
+      const effGrams = round1(Math.max(1, this.gramsInputVal || 100));
       if (effGrams <= 0) {
         new Notice("Укажи вес порции больше 0 г.");
         return;
       }
       const calc = this.calculatePortionMacros(activeFood, effGrams);
-      const pieceNote =
-        this.portionMode === "pieces" &&
-        activeFood.pieceGrams &&
-        activeFood.pieceGrams > 0
-          ? `${this.piecesInputVal} ${activeFood.pieceLabel || "шт."}`
-          : undefined;
 
       submitBtn.disabled = true;
       try {
         await appendMealToDiary(this.app, this.plugin.settings, this.dateISO, {
           name: activeFood.name,
           grams: effGrams,
-          pieceNote,
           ...calc,
         });
         this.plugin.foodStore.recordFoodUsage(activeFood.id, effGrams);
-        new Notice(`Добавлено: ${activeFood.name} (${calc.kcal} ккал)`);
+        new Notice(`Добавлено: ${activeFood.name} (${effGrams} г · ${calc.kcal} ккал)`);
         await this.refreshAll();
       } catch (err: unknown) {
         new Notice(
@@ -635,16 +665,35 @@ export class NutritionTrackerModal extends Modal {
       }
     );
     mkField(
-      "Вес 1 шт./порц. (г, необяз.)",
-      "Напр. 60",
-      this.newFoodDraft.pieceGrams,
+      "Стандартная порция (г)",
+      "Напр. 150",
+      this.newFoodDraft.defaultGrams,
       true,
       (v) => {
-        this.newFoodDraft.pieceGrams = v;
+        this.newFoodDraft.defaultGrams = v;
       }
     );
 
     const actions = drawer.createDiv("my-nt-drawer-actions");
+    if (this.editingFoodId) {
+      const delFromDrawerBtn = actions.createEl("button", {
+        cls: "my-nt-btn is-danger",
+        text: "✕ Удалить продукт из базы",
+        attr: { type: "button" },
+      });
+      delFromDrawerBtn.onclick = () => {
+        if (!this.editingFoodId) return;
+        const target = this.plugin.foodStore.findById(this.editingFoodId);
+        this.plugin.foodStore.deleteFood(this.editingFoodId);
+        this.isCreateFoodOpen = false;
+        this.editingFoodId = null;
+        const nextFirst = this.plugin.foodStore.getSortedFoods()[0];
+        this.selectedFoodId = nextFirst?.id ?? "";
+        new Notice(`Продукт «${target?.name ?? ""}» удалён из базы.`);
+        this.renderAdder();
+      };
+    }
+
     const saveFoodBtn = actions.createEl("button", {
       cls: "mod-cta my-nt-btn",
       text: "✓ Сохранить в базу продуктов",
@@ -660,7 +709,8 @@ export class NutritionTrackerModal extends Modal {
       const p = Number(this.newFoodDraft.proteinPer100.replace(",", ".")) || 0;
       const f = Number(this.newFoodDraft.fatPer100.replace(",", ".")) || 0;
       const c = Number(this.newFoodDraft.carbsPer100.replace(",", ".")) || 0;
-      const pg = Number(this.newFoodDraft.pieceGrams.replace(",", ".")) || 0;
+      const defG =
+        Number(this.newFoodDraft.defaultGrams.replace(",", ".")) || 100;
 
       const saved = this.plugin.foodStore.upsertFood({
         id: this.editingFoodId ?? undefined,
@@ -669,24 +719,12 @@ export class NutritionTrackerModal extends Modal {
         proteinPer100: p,
         fatPer100: f,
         carbsPer100: c,
-        pieceGrams: pg > 0 ? pg : undefined,
-        pieceLabel: pg > 0 ? this.newFoodDraft.pieceLabel || "шт." : undefined,
-        defaultGrams: pg > 0 ? pg * 2 : 100,
+        defaultGrams: defG > 0 ? defG : 100,
         isFavorite: true,
       });
 
       this.isCreateFoodOpen = false;
       this.editingFoodId = null;
-      this.newFoodDraft = {
-        name: "",
-        kcalPer100: "",
-        proteinPer100: "",
-        fatPer100: "",
-        carbsPer100: "",
-        pieceGrams: "",
-        pieceLabel: "шт.",
-        isFavorite: true,
-      };
       this.selectFood(saved, true);
       new Notice(`Продукт «${saved.name}» сохранён в базу.`);
     };
@@ -723,7 +761,7 @@ export class NutritionTrackerModal extends Modal {
         left.createSpan({ cls: "my-nt-meal-time", text: e.timeStr });
       }
       left.createSpan({ cls: "my-nt-meal-name", text: e.name });
-      left.createSpan({ cls: "my-nt-meal-amount", text: e.amountText });
+      left.createSpan({ cls: "my-nt-meal-amount", text: `${e.grams} г` });
 
       const right = row.createDiv("my-nt-meal-right");
       right.createSpan({

@@ -9,11 +9,11 @@ import {
 } from "./types";
 
 /**
- * Формат строки приёма пищи в разделе `## Питание`:
- * - 09:30 · Сырники творожные · 180 г (3 шт.) · 333 ккал · Б: 26.1 · Ж: 13.5 · У: 27
+ * Формат строки приёма пищи в разделе `## Питание` (только граммы, но старые строки со скобками тоже парсятся):
+ * - 09:30 · Сырники творожные · 180 г · 333 ккал · Б: 26.1 · Ж: 13.5 · У: 27
  */
 const MEAL_LINE_REGEX =
-  /^-\s*(?:(\d{2}:\d{2})\s*·\s*)?(.+?)\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*г(?:\s*\(([^)]+)\))?\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*ккал\s*·\s*Б:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*Ж:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*У:\s*([0-9]+(?:[.,][0-9]+)?)\s*$/i;
+  /^-\s*(?:(\d{2}:\d{2})\s*·\s*)?(.+?)\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*г(?:\s*\([^)]*\))?\s*·\s*([0-9]+(?:[.,][0-9]+)?)\s*ккал\s*·\s*Б:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*Ж:\s*([0-9]+(?:[.,][0-9]+)?)\s*·\s*У:\s*([0-9]+(?:[.,][0-9]+)?)\s*$/i;
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
@@ -75,10 +75,6 @@ async function ensureFolder(app: App, folderPath: string): Promise<void> {
   }
 }
 
-/**
- * Ищет файл ежедневника за дату (сначала по прямому пути `Ежедневник/YYYY-MM-DD.md`,
- * затем в папке `Ежедневник` по полю `дата`, как делает health.js).
- */
 export function findDiaryFileForDate(
   app: App,
   settings: NutritionPluginSettings,
@@ -131,10 +127,6 @@ export async function getOrCreateDiaryFile(
   return await app.vault.create(targetPath, content);
 }
 
-/**
- * Находит границы раздела `## Питание` в строках файла.
- * Читает только внутри раздела `## Питание`, не затрагивая другие списки заметки.
- */
 function findNutritionSectionBounds(lines: string[]): {
   headingIdx: number;
   endIdx: number;
@@ -175,20 +167,17 @@ export function parseMealsFromDiaryContent(content: string): LoggedMealEntry[] {
     const timeStr = (m[1] ?? "").trim();
     const name = (m[2] ?? "").trim();
     const grams = Number((m[3] ?? "0").replace(",", "."));
-    const pieceExtra = (m[4] ?? "").trim();
-    const kcal = Number((m[5] ?? "0").replace(",", "."));
-    const protein = Number((m[6] ?? "0").replace(",", "."));
-    const fat = Number((m[7] ?? "0").replace(",", "."));
-    const carbs = Number((m[8] ?? "0").replace(",", "."));
+    const kcal = Number((m[4] ?? "0").replace(",", "."));
+    const protein = Number((m[5] ?? "0").replace(",", "."));
+    const fat = Number((m[6] ?? "0").replace(",", "."));
+    const carbs = Number((m[7] ?? "0").replace(",", "."));
 
     if (!name || !Number.isFinite(grams)) continue;
-    const amountText = pieceExtra ? `${grams} г (${pieceExtra})` : `${grams} г`;
 
     entries.push({
       lineIndex: i,
       timeStr,
       name,
-      amountText,
       grams: round1(grams),
       kcal: Math.round(kcal),
       protein: round1(protein),
@@ -222,20 +211,18 @@ export function formatMealMarkdownLine(entry: {
   timeStr: string;
   name: string;
   grams: number;
-  pieceNote?: string;
   kcal: number;
   protein: number;
   fat: number;
   carbs: number;
 }): string {
-  const gStr = `${round1(entry.grams)} г${entry.pieceNote ? ` (${entry.pieceNote})` : ""}`;
-  return `- ${entry.timeStr} · ${entry.name} · ${gStr} · ${Math.round(entry.kcal)} ккал · Б: ${round1(entry.protein)} · Ж: ${round1(entry.fat)} · У: ${round1(entry.carbs)}`;
+  return `- ${entry.timeStr} · ${entry.name} · ${round1(entry.grams)} г · ${Math.round(entry.kcal)} ккал · Б: ${round1(entry.protein)} · Ж: ${round1(entry.fat)} · У: ${round1(entry.carbs)}`;
 }
 
 /**
  * Пересчитывает сумму приёмов пищи из раздела `## Питание` и записывает числа в YAML через processFrontMatter.
- * Если список съеденного пуст (например, удалили все записи), не пишет нули и не затирает ручной ввод,
- * если пользователь не просил очистить.
+ * Если дневная цель калорий задана (> 0), обновляет флаг `диета: true/false`.
+ * Если цель удалена (null), поле `диета` не принуждается.
  */
 export async function syncMacrosToDiaryFrontmatter(
   app: App,
@@ -250,9 +237,15 @@ export async function syncMacrosToDiaryFrontmatter(
     return totals;
   }
 
-  clearManualHabitOverrideForDate(dateISO, DIARY_KEYS.dietFlag);
-  const goal = Math.max(500, settings.dailyCalorieGoal || 2600);
-  const isDietDone = totals.kcal >= goal;
+  const goal =
+    typeof settings.dailyCalorieGoal === "number" &&
+    settings.dailyCalorieGoal > 0
+      ? settings.dailyCalorieGoal
+      : null;
+
+  if (goal !== null) {
+    clearManualHabitOverrideForDate(dateISO, DIARY_KEYS.dietFlag);
+  }
 
   await app.fileManager.processFrontMatter(
     diaryFile,
@@ -262,13 +255,17 @@ export async function syncMacrosToDiaryFrontmatter(
         delete fm[DIARY_KEYS.proteinG];
         delete fm[DIARY_KEYS.fatG];
         delete fm[DIARY_KEYS.carbsG];
-        fm[DIARY_KEYS.dietFlag] = false;
+        if (goal !== null) {
+          fm[DIARY_KEYS.dietFlag] = false;
+        }
       } else {
         fm[DIARY_KEYS.caloriesKcal] = totals.kcal;
         fm[DIARY_KEYS.proteinG] = totals.protein;
         fm[DIARY_KEYS.fatG] = totals.fat;
         fm[DIARY_KEYS.carbsG] = totals.carbs;
-        fm[DIARY_KEYS.dietFlag] = isDietDone;
+        if (goal !== null) {
+          fm[DIARY_KEYS.dietFlag] = totals.kcal >= goal;
+        }
       }
     }
   );
@@ -283,7 +280,6 @@ export async function appendMealToDiary(
   meal: {
     name: string;
     grams: number;
-    pieceNote?: string;
     kcal: number;
     protein: number;
     fat: number;

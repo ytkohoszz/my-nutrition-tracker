@@ -23,7 +23,6 @@ function sanitizeFoodItem(raw: unknown): FoodItem | null {
 
   const id =
     typeof f.id === "string" && f.id.trim() ? f.id.trim() : makeFoodId();
-  const pieceGrams = num(f.pieceGrams, 0);
 
   return {
     id,
@@ -32,14 +31,7 @@ function sanitizeFoodItem(raw: unknown): FoodItem | null {
     proteinPer100: num(f.proteinPer100, 0),
     fatPer100: num(f.fatPer100, 0),
     carbsPer100: num(f.carbsPer100, 0),
-    pieceGrams: pieceGrams > 0 ? pieceGrams : undefined,
-    pieceLabel:
-      typeof f.pieceLabel === "string" && f.pieceLabel.trim()
-        ? f.pieceLabel.trim()
-        : pieceGrams > 0
-          ? "порц."
-          : undefined,
-    defaultGrams: num(f.defaultGrams, pieceGrams > 0 ? pieceGrams : 100) || 100,
+    defaultGrams: num(f.defaultGrams, 100) || 100,
     isFavorite: Boolean(f.isFavorite),
     useCount: Math.max(0, Math.round(num(f.useCount, 0))),
     lastUsedAt: Math.max(0, Math.round(num(f.lastUsedAt, 0))),
@@ -95,13 +87,10 @@ export class FoodCatalogStore {
           const valid = parsed.foods
             .map(sanitizeFoodItem)
             .filter((x): x is FoodItem => x !== null);
-          if (valid.length > 0) {
-            this.foods = valid;
-            return;
-          }
+          this.foods = valid;
+          return;
         }
       } catch {
-        // если файл повреждён, не перезаписываем молча, но держим дефолты в памяти
         return;
       }
     }
@@ -114,9 +103,6 @@ export class FoodCatalogStore {
     return this.foods;
   }
 
-  /**
-   * Сортирует продукты для быстрого выбора: сначала избранные, затем недавние и частые, затем по алфавиту.
-   */
   getSortedFoods(query = ""): FoodItem[] {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -141,11 +127,15 @@ export class FoodCatalogStore {
     return this.foods.find((f) => f.id === id);
   }
 
-  upsertFood(draft: Omit<FoodItem, "id" | "useCount" | "lastUsedAt"> & { id?: string }): FoodItem {
+  upsertFood(
+    draft: Omit<FoodItem, "id" | "useCount" | "lastUsedAt"> & { id?: string }
+  ): FoodItem {
     const cleanName = draft.name.replace(/\s+/g, " ").trim();
     const existing = draft.id
       ? this.foods.find((f) => f.id === draft.id)
-      : this.foods.find((f) => f.name.toLowerCase() === cleanName.toLowerCase());
+      : this.foods.find(
+          (f) => f.name.toLowerCase() === cleanName.toLowerCase()
+        );
 
     if (existing) {
       existing.name = cleanName;
@@ -153,14 +143,6 @@ export class FoodCatalogStore {
       existing.proteinPer100 = round1(draft.proteinPer100);
       existing.fatPer100 = round1(draft.fatPer100);
       existing.carbsPer100 = round1(draft.carbsPer100);
-      existing.pieceGrams =
-        draft.pieceGrams && draft.pieceGrams > 0
-          ? round1(draft.pieceGrams)
-          : undefined;
-      existing.pieceLabel =
-        draft.pieceGrams && draft.pieceGrams > 0
-          ? draft.pieceLabel?.trim() || "шт."
-          : undefined;
       existing.defaultGrams = round1(draft.defaultGrams || 100);
       existing.isFavorite = Boolean(draft.isFavorite);
       this.requestSave();
@@ -174,18 +156,7 @@ export class FoodCatalogStore {
       proteinPer100: round1(draft.proteinPer100),
       fatPer100: round1(draft.fatPer100),
       carbsPer100: round1(draft.carbsPer100),
-      pieceGrams:
-        draft.pieceGrams && draft.pieceGrams > 0
-          ? round1(draft.pieceGrams)
-          : undefined,
-      pieceLabel:
-        draft.pieceGrams && draft.pieceGrams > 0
-          ? draft.pieceLabel?.trim() || "шт."
-          : undefined,
-      defaultGrams: round1(
-        draft.defaultGrams ||
-          (draft.pieceGrams && draft.pieceGrams > 0 ? draft.pieceGrams : 100)
-      ),
+      defaultGrams: round1(draft.defaultGrams || 100),
       isFavorite: Boolean(draft.isFavorite),
       useCount: 1,
       lastUsedAt: Date.now(),
@@ -213,12 +184,12 @@ export class FoodCatalogStore {
     this.requestSave();
   }
 
-  deleteFood(foodId: string): void {
+  deleteFood(foodId: string): boolean {
     const idx = this.foods.findIndex((f) => f.id === foodId);
-    if (idx !== -1) {
-      this.foods.splice(idx, 1);
-      this.requestSave();
-    }
+    if (idx === -1) return false;
+    this.foods.splice(idx, 1);
+    this.requestSave();
+    return true;
   }
 
   requestSave(): void {
@@ -233,7 +204,7 @@ export class FoodCatalogStore {
     try {
       await ensureParentFolder(this.app, this.dbPath);
       const payload: FoodCatalogFileData = {
-        version: 1,
+        version: 2,
         foods: this.foods,
       };
       const jsonText = JSON.stringify(payload, null, 2);

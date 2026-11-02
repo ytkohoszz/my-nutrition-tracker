@@ -11,8 +11,6 @@ export const DIARY_KEYS = {
 export const NUTRITION_SECTION_HEADING = "## Питание";
 export const MANUAL_HABITS_PREFIX = "dh_today_manual_habits_v1:";
 
-export type PortionMode = "grams" | "pieces";
-
 export interface FoodItem {
   id: string;
   name: string;
@@ -20,8 +18,6 @@ export interface FoodItem {
   proteinPer100: number;
   fatPer100: number;
   carbsPer100: number;
-  pieceGrams?: number;
-  pieceLabel?: string;
   defaultGrams: number;
   isFavorite?: boolean;
   useCount: number;
@@ -37,7 +33,6 @@ export interface LoggedMealEntry {
   lineIndex: number;
   timeStr: string;
   name: string;
-  amountText: string;
   grams: number;
   kcal: number;
   protein: number;
@@ -55,7 +50,8 @@ export interface DailyMacrosSummary {
 export interface NutritionPluginSettings {
   diaryFolder: string;
   foodDbPath: string;
-  dailyCalorieGoal: number;
+  /** null или 0 означает, что цель отключена (считается только факт) */
+  dailyCalorieGoal: number | null;
 }
 
 export const DEFAULT_SETTINGS: NutritionPluginSettings = {
@@ -81,8 +77,6 @@ export const DEFAULT_FOODS: readonly FoodItem[] = [
     proteinPer100: 17,
     fatPer100: 5,
     carbsPer100: 1.8,
-    pieceGrams: 200,
-    pieceLabel: "пачка",
     defaultGrams: 200,
     isFavorite: true,
     useCount: 5,
@@ -95,8 +89,6 @@ export const DEFAULT_FOODS: readonly FoodItem[] = [
     proteinPer100: 14.5,
     fatPer100: 7.5,
     carbsPer100: 15,
-    pieceGrams: 60,
-    pieceLabel: "шт.",
     defaultGrams: 180,
     isFavorite: true,
     useCount: 4,
@@ -109,8 +101,6 @@ export const DEFAULT_FOODS: readonly FoodItem[] = [
     proteinPer100: 78,
     fatPer100: 5.5,
     carbsPer100: 7,
-    pieceGrams: 30,
-    pieceLabel: "скуп",
     defaultGrams: 30,
     isFavorite: true,
     useCount: 5,
@@ -123,9 +113,7 @@ export const DEFAULT_FOODS: readonly FoodItem[] = [
     proteinPer100: 12.7,
     fatPer100: 11.5,
     carbsPer100: 0.7,
-    pieceGrams: 55,
-    pieceLabel: "шт.",
-    defaultGrams: 165,
+    defaultGrams: 150,
     isFavorite: true,
     useCount: 4,
     lastUsedAt: 0,
@@ -185,8 +173,6 @@ export const DEFAULT_FOODS: readonly FoodItem[] = [
     proteinPer100: 1.5,
     fatPer100: 0.5,
     carbsPer100: 21,
-    pieceGrams: 120,
-    pieceLabel: "шт.",
     defaultGrams: 120,
     isFavorite: false,
     useCount: 2,

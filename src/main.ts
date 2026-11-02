@@ -8,6 +8,18 @@ function migrateSettings(raw: unknown): NutritionPluginSettings {
     raw && typeof raw === "object"
       ? (raw as Partial<NutritionPluginSettings>)
       : {};
+
+  let goal: number | null = DEFAULT_SETTINGS.dailyCalorieGoal;
+  if (s.dailyCalorieGoal === null || s.dailyCalorieGoal === 0) {
+    goal = null;
+  } else if (
+    typeof s.dailyCalorieGoal === "number" &&
+    Number.isFinite(s.dailyCalorieGoal) &&
+    s.dailyCalorieGoal > 0
+  ) {
+    goal = Math.round(s.dailyCalorieGoal);
+  }
+
   return {
     diaryFolder:
       typeof s.diaryFolder === "string" && s.diaryFolder.trim()
@@ -17,12 +29,7 @@ function migrateSettings(raw: unknown): NutritionPluginSettings {
       typeof s.foodDbPath === "string" && s.foodDbPath.trim()
         ? s.foodDbPath.trim()
         : DEFAULT_SETTINGS.foodDbPath,
-    dailyCalorieGoal:
-      typeof s.dailyCalorieGoal === "number" &&
-      Number.isFinite(s.dailyCalorieGoal) &&
-      s.dailyCalorieGoal >= 500
-        ? Math.round(s.dailyCalorieGoal)
-        : DEFAULT_SETTINGS.dailyCalorieGoal,
+    dailyCalorieGoal: goal,
   };
 }
 
@@ -40,17 +47,27 @@ class NutritionTrackerSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "Питание и БЖУ" });
 
     new Setting(containerEl)
-      .setName("Дневная цель калорий")
+      .setName("Дневная цель калорий (необязательно)")
       .setDesc(
-        "По умолчанию: 2600. При достижении этой суммы в ежедневнике автоматически ставится «диета: true»"
+        "Оставь поле пустым, чтобы отключить цель и считать только факт. Если цель задана (по умолчанию 2600), при её достижении в ежедневнике ставится «диета: true»"
       )
       .addText((text) =>
         text
-          .setPlaceholder("2600")
-          .setValue(String(this.plugin.settings.dailyCalorieGoal))
+          .setPlaceholder("Без цели (или напр. 2600)")
+          .setValue(
+            this.plugin.settings.dailyCalorieGoal !== null
+              ? String(this.plugin.settings.dailyCalorieGoal)
+              : ""
+          )
           .onChange((val) => {
-            const n = Math.round(Number(val.trim()));
-            if (Number.isFinite(n) && n >= 500 && n <= 10000) {
+            const clean = val.trim();
+            if (!clean) {
+              this.plugin.settings.dailyCalorieGoal = null;
+              this.plugin.requestSaveSettings();
+              return;
+            }
+            const n = Math.round(Number(clean));
+            if (Number.isFinite(n) && n > 0 && n <= 15000) {
               this.plugin.settings.dailyCalorieGoal = n;
               this.plugin.requestSaveSettings();
             }

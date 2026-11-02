@@ -1,5 +1,5 @@
 /* ============================================================
-   Питание и БЖУ (my-nutrition-tracker v0.1.0)
+   Питание и БЖУ (my-nutrition-tracker v0.1.1)
    Шкала отступов: 4 / 8 / 12 / 16 px
    Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
    ============================================================ */
@@ -87,7 +87,7 @@
   margin-top: 2px;
 }
 
-/* ---------- Сводка КБЖУ за день ---------- */
+/* ---------- Сводка КБЖУ за день и управление целью ---------- */
 .my-nt-summary-card,
 .my-nt-adder-card,
 .my-nt-log-card {
@@ -103,7 +103,7 @@
 .my-nt-kcal-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--my-nt-s2);
 }
@@ -122,6 +122,34 @@
 .my-nt-kcal-goal {
   font-size: var(--my-nt-fs-sm);
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-goal-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-goal-drawer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+}
+
+.my-nt-goal-input {
+  width: 110px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
   font-variant-numeric: tabular-nums;
 }
 
@@ -189,7 +217,7 @@
   color: var(--text-normal);
 }
 
-/* ---------- Добавление продукта ---------- */
+/* ---------- Добавление продукта (только граммы) ---------- */
 .my-nt-section-head {
   display: flex;
   justify-content: space-between;
@@ -233,7 +261,7 @@ button.my-nt-food-chip.is-active {
 .my-nt-select-row {
   display: flex;
   align-items: center;
-  gap: var(--my-nt-s2);
+  gap: 6px;
 }
 
 .my-nt-food-select {
@@ -260,34 +288,6 @@ button.my-nt-food-chip.is-active {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--my-nt-s2);
-}
-
-.my-nt-mode-seg {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  gap: 2px;
-}
-
-button.my-nt-mode-btn {
-  height: 26px !important;
-  min-height: 26px !important;
-  padding: 0 10px !important;
-  border-radius: 6px !important;
-  font-size: var(--my-nt-fs-xs) !important;
-  font-weight: 500 !important;
-  background: transparent !important;
-  border: none !important;
-  color: var(--text-muted) !important;
-  box-shadow: none !important;
-  cursor: pointer;
-}
-
-button.my-nt-mode-btn.is-active {
-  background: var(--background-primary) !important;
-  color: var(--text-normal) !important;
 }
 
 .my-nt-portion-preview {
@@ -355,6 +355,12 @@ button.my-nt-btn.is-active {
   color: var(--interactive-accent) !important;
 }
 
+button.my-nt-btn.is-danger {
+  color: var(--text-error, #e06c75) !important;
+  border-color: color-mix(in srgb, var(--text-error, #e06c75) 50%, var(--background-modifier-border)) !important;
+  background: color-mix(in srgb, var(--text-error, #e06c75) 12%, var(--background-primary)) !important;
+}
+
 button.my-nt-primary-btn {
   width: 100%;
   height: 40px !important;
@@ -365,7 +371,7 @@ button.my-nt-primary-btn {
   cursor: pointer;
 }
 
-/* ---------- Создание своего продукта ---------- */
+/* ---------- Создание / редактирование продукта ---------- */
 .my-nt-create-drawer {
   padding: 10px 12px;
   border-radius: 10px;
@@ -412,7 +418,10 @@ button.my-nt-primary-btn {
 
 .my-nt-drawer-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
 }
 
 /* ---------- Список съеденного за день ---------- */
@@ -510,11 +519,15 @@ button.my-nt-meal-del:hover {
   }
 
   button.my-nt-food-chip,
-  button.my-nt-btn,
-  button.my-nt-mode-btn {
+  button.my-nt-btn {
     height: 38px !important;
     min-height: 38px !important;
     padding: 0 12px !important;
+  }
+
+  .my-nt-goal-input {
+    height: 38px !important;
+    min-height: 38px !important;
   }
 
   button.my-nt-primary-btn {
