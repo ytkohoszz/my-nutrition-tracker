@@ -1,11 +1,9 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"id": "my-nutrition-tracker",
+	"name": "Питание и БЖУ",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Быстрый учёт калорий и БЖУ за день, личная база продуктов в хранилище и синхронизация с ежедневником",
+	"author": "Mersinho",
 	"isDesktopOnly": false
 }

@@ -1,8 +1,546 @@
-/*
+/* ============================================================
+   Питание и БЖУ (my-nutrition-tracker v0.1.0)
+   Шкала отступов: 4 / 8 / 12 / 16 px
+   Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
+   ============================================================ */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.modal.my-nt-modal-container {
+  --my-nt-s1: 4px;
+  --my-nt-s2: 8px;
+  --my-nt-s3: 12px;
+  --my-nt-s4: 16px;
+  --my-nt-fs-lg: 1.02rem;
+  --my-nt-fs: 0.88rem;
+  --my-nt-fs-sm: 0.78rem;
+  --my-nt-fs-xs: 0.72rem;
+  --my-nt-hit: 36px;
 
-If your plugin does not need CSS, delete this file.
+  position: relative;
+  width: min(760px, 96vw) !important;
+  max-width: 760px !important;
+  max-height: 92vh !important;
+  padding: var(--my-nt-s4) !important;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+}
 
-*/
+.modal.my-nt-modal-container > .modal-close-button {
+  top: var(--my-nt-s4);
+  right: var(--my-nt-s3);
+  z-index: 10;
+}
+
+.my-nt-modal {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--my-nt-s3);
+  outline: none !important;
+  overflow-y: auto;
+}
+
+.my-nt-modal:focus,
+.my-nt-modal:focus-visible {
+  outline: none !important;
+}
+
+.my-nt-modal * {
+  box-sizing: border-box;
+}
+
+.my-nt-modal svg.svg-icon {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  flex-shrink: 0 !important;
+  stroke: currentColor !important;
+  stroke-width: 2px !important;
+  fill: none !important;
+  display: block !important;
+}
+
+/* ---------- Шапка ---------- */
+.my-nt-header {
+  padding-right: 36px;
+}
+
+.my-nt-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-title {
+  font-size: var(--my-nt-fs-lg);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-subtitle {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ---------- Сводка КБЖУ за день ---------- */
+.my-nt-summary-card,
+.my-nt-adder-card,
+.my-nt-log-card {
+  padding: var(--my-nt-s3) var(--my-nt-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-kcal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-kcal-big {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+
+.my-nt-kcal-big.is-done {
+  color: var(--color-green, #4aab80);
+}
+
+.my-nt-kcal-goal {
+  font-size: var(--my-nt-fs-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-diet-badge {
+  font-size: var(--my-nt-fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.my-nt-diet-badge.is-done {
+  color: var(--color-green, #4aab80);
+  background: color-mix(in srgb, var(--color-green, #4aab80) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-green, #4aab80) 40%, transparent);
+}
+
+.my-nt-progress-track {
+  height: 7px;
+  border-radius: 99px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.my-nt-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--interactive-accent);
+  transition: width 0.2s ease;
+}
+
+.my-nt-progress-fill.is-done {
+  background: var(--color-green, #4aab80);
+}
+
+.my-nt-macros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--my-nt-s2);
+  padding-top: 2px;
+}
+
+.my-nt-macro-box {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.my-nt-macro-label {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+}
+
+.my-nt-macro-val {
+  font-size: var(--my-nt-fs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+
+/* ---------- Добавление продукта ---------- */
+.my-nt-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-section-title {
+  font-size: var(--my-nt-fs-sm);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-food-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button.my-nt-food-chip {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 11px !important;
+  border-radius: 99px !important;
+  font-size: var(--my-nt-fs-xs) !important;
+  font-weight: 500 !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-nt-food-chip.is-active {
+  color: var(--interactive-accent) !important;
+  border-color: var(--interactive-accent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary)) !important;
+}
+
+.my-nt-select-row {
+  display: flex;
+  align-items: center;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-food-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--my-nt-hit);
+  font-size: var(--my-nt-fs);
+  font-weight: 500;
+}
+
+.my-nt-portion-box {
+  padding: var(--my-nt-s2) var(--my-nt-s3);
+  border-radius: 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-portion-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-mode-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  gap: 2px;
+}
+
+button.my-nt-mode-btn {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  font-size: var(--my-nt-fs-xs) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-nt-mode-btn.is-active {
+  background: var(--background-primary) !important;
+  color: var(--text-normal) !important;
+}
+
+.my-nt-portion-preview {
+  font-size: var(--my-nt-fs-xs);
+  font-weight: 600;
+  color: var(--interactive-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-stepper-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+}
+
+button.my-nt-step-btn {
+  min-width: 48px !important;
+  height: var(--my-nt-hit) !important;
+  min-height: var(--my-nt-hit) !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  font-size: var(--my-nt-fs-sm) !important;
+  font-weight: 600 !important;
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.my-nt-step-input {
+  width: 86px !important;
+  height: var(--my-nt-hit) !important;
+  text-align: center;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  font-variant-numeric: tabular-nums;
+  border-radius: 8px !important;
+}
+
+.my-nt-quick-Portions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+button.my-nt-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  font-size: var(--my-nt-fs-xs) !important;
+  font-weight: 500 !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-nt-btn.is-active {
+  border-color: var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
+}
+
+button.my-nt-primary-btn {
+  width: 100%;
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 10px !important;
+  font-size: var(--my-nt-fs) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+/* ---------- Создание своего продукта ---------- */
+.my-nt-create-drawer {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-drawer-title {
+  font-size: var(--my-nt-fs-xs);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-create-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--my-nt-s2);
+}
+
+.my-nt-labeled-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.my-nt-field-caption {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.my-nt-field-input {
+  width: 100% !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: var(--my-nt-fs-sm) !important;
+}
+
+.my-nt-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- Список съеденного за день ---------- */
+.my-nt-meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.my-nt-meal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-size: var(--my-nt-fs-sm);
+}
+
+.my-nt-meal-left {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.my-nt-meal-time {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-meal-name {
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-meal-amount {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+}
+
+.my-nt-meal-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-meal-kcal {
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-meal-macros {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+}
+
+button.my-nt-meal-del {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+}
+
+button.my-nt-meal-del:hover {
+  color: var(--text-error, #e06c75) !important;
+  background: var(--background-modifier-hover) !important;
+}
+
+.my-nt-empty {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+}
+
+/* ---------- iPadOS / iOS (pointer: coarse): зоны 44x44 px ---------- */
+@media (pointer: coarse), (any-pointer: coarse), (hover: none) {
+  .modal.my-nt-modal-container {
+    --my-nt-hit: 44px;
+  }
+
+  button.my-nt-food-chip,
+  button.my-nt-btn,
+  button.my-nt-mode-btn {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 12px !important;
+  }
+
+  button.my-nt-primary-btn {
+    height: 46px !important;
+    min-height: 46px !important;
+  }
+
+  button.my-nt-meal-del {
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal.my-nt-modal-container {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding-top: max(12px, env(safe-area-inset-top, 12px)) !important;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
+    padding-left: max(12px, env(safe-area-inset-left, 12px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 12px)) !important;
+  }
+}

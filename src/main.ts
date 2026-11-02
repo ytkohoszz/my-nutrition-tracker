@@ -1,114 +1,140 @@
-import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { DEFAULT_SETTINGS, NutritionPluginSettings } from "./types";
+import { FoodCatalogStore } from "./food-store";
+import { NutritionTrackerModal, OpenNutritionOptions } from "./modal";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
-
-	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
-	}
-
-	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+function migrateSettings(raw: unknown): NutritionPluginSettings {
+  const s =
+    raw && typeof raw === "object"
+      ? (raw as Partial<NutritionPluginSettings>)
+      : {};
+  return {
+    diaryFolder:
+      typeof s.diaryFolder === "string" && s.diaryFolder.trim()
+        ? s.diaryFolder.trim()
+        : DEFAULT_SETTINGS.diaryFolder,
+    foodDbPath:
+      typeof s.foodDbPath === "string" && s.foodDbPath.trim()
+        ? s.foodDbPath.trim()
+        : DEFAULT_SETTINGS.foodDbPath,
+    dailyCalorieGoal:
+      typeof s.dailyCalorieGoal === "number" &&
+      Number.isFinite(s.dailyCalorieGoal) &&
+      s.dailyCalorieGoal >= 500
+        ? Math.round(s.dailyCalorieGoal)
+        : DEFAULT_SETTINGS.dailyCalorieGoal,
+  };
 }
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
+class NutritionTrackerSettingTab extends PluginSettingTab {
+  plugin: MyNutritionTrackerPlugin;
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
+  constructor(app: App, plugin: MyNutritionTrackerPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h3", { text: "Питание и БЖУ" });
+
+    new Setting(containerEl)
+      .setName("Дневная цель калорий")
+      .setDesc(
+        "По умолчанию: 2600. При достижении этой суммы в ежедневнике автоматически ставится «диета: true»"
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("2600")
+          .setValue(String(this.plugin.settings.dailyCalorieGoal))
+          .onChange((val) => {
+            const n = Math.round(Number(val.trim()));
+            if (Number.isFinite(n) && n >= 500 && n <= 10000) {
+              this.plugin.settings.dailyCalorieGoal = n;
+              this.plugin.requestSaveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Папка ежедневника")
+      .setDesc("По умолчанию: Ежедневник (заметки «ГГГГ-ММ-ДД.md»)")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.diaryFolder).onChange((val) => {
+          this.plugin.settings.diaryFolder =
+            val.trim() || DEFAULT_SETTINGS.diaryFolder;
+          this.plugin.requestSaveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Файл базы продуктов в хранилище")
+      .setDesc(
+        "Читаемый JSON-файл в хранилище (по умолчанию: Знания/База продуктов.json)"
+      )
+      .addText((text) =>
+        text.setValue(this.plugin.settings.foodDbPath).onChange((val) => {
+          const next = val.trim() || DEFAULT_SETTINGS.foodDbPath;
+          this.plugin.settings.foodDbPath = next;
+          this.plugin.foodStore.setDbPath(next);
+          this.plugin.requestSaveSettings();
+        })
+      );
+  }
+}
+
+export default class MyNutritionTrackerPlugin extends Plugin {
+  settings!: NutritionPluginSettings;
+  foodStore!: FoodCatalogStore;
+  private saveTimer: number | null = null;
+
+  async onload() {
+    this.settings = migrateSettings(await this.loadData());
+    this.foodStore = new FoodCatalogStore(this.app, this.settings.foodDbPath);
+
+    this.app.workspace.onLayoutReady(() => {
+      void this.foodStore.load();
+    });
+
+    this.addSettingTab(new NutritionTrackerSettingTab(this.app, this));
+
+    this.addRibbonIcon("utensils", "Открыть дневник питания и БЖУ", () => {
+      this.openNutrition();
+    });
+
+    this.registerObsidianProtocolHandler("my-nutrition", (params) => {
+      this.openNutrition({
+        dateISO: params.date || undefined,
+      });
+    });
+
+    this.addCommand({
+      id: "open-nutrition-tracker",
+      name: "Открыть дневник питания и БЖУ",
+      callback: () => this.openNutrition(),
+    });
+  }
+
+  openNutrition(options: OpenNutritionOptions = {}) {
+    void this.foodStore.load().then(() => {
+      new NutritionTrackerModal(this.app, this, options).open();
+    });
+  }
+
+  requestSaveSettings() {
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      this.saveTimer = null;
+      void this.saveData(this.settings);
+    }, 250);
+  }
+
+  onunload() {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.foodStore?.flush();
+  }
 }
