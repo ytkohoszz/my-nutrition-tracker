@@ -118,7 +118,7 @@ export class NutritionTrackerModal extends Modal {
     this.confirmDeleteFoodId = null;
     this.gramsInputVal = food.defaultGrams || 100;
     if (rerender) {
-      void this.refreshAll();
+      this.renderAdder();
     }
   }
 
@@ -354,14 +354,14 @@ export class NutritionTrackerModal extends Modal {
 
     const newFoodBtn = head.createEl("button", {
       cls: "my-nt-btn" + (this.isCreateFoodOpen ? " is-active" : ""),
-      text: this.isCreateFoodOpen ? "✕ Закрыть форму" : "＋ Свой продукт в базу",
+      text: this.isCreateFoodOpen ? "✕ Закрыть форму" : "＋ Свой продукт",
       attr: { type: "button" },
     });
     newFoodBtn.onclick = () => {
       this.isCreateFoodOpen = !this.isCreateFoodOpen;
       this.editingFoodId = null;
       this.newFoodDraft = {
-        name: "",
+        name: this.searchQuery.trim(),
         kcalPer100: "",
         proteinPer100: "",
         fatPer100: "",
@@ -376,119 +376,212 @@ export class NutritionTrackerModal extends Modal {
       this.renderCreateFoodDrawer();
     }
 
-    const sortedFoods = this.plugin.foodStore.getSortedFoods(this.searchQuery);
-    if (!this.selectedFoodId && sortedFoods[0]) {
-      this.selectedFoodId = sortedFoods[0].id;
-    }
-    const activeFood =
-      this.plugin.foodStore.findById(this.selectedFoodId) ?? sortedFoods[0];
-
-    if (sortedFoods.length > 0) {
-      const quickChipsWrap = this.adderEl.createDiv("my-nt-food-chips");
-      for (const f of sortedFoods.slice(0, 12)) {
-        const isSelected = activeFood?.id === f.id;
-        const chip = quickChipsWrap.createEl("button", {
-          cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
-          text: `${f.isFavorite ? "★ " : ""}${f.name}`,
-          attr: {
-            type: "button",
-            title: `${f.kcalPer100} ккал на 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
-          },
-        });
-        chip.onclick = () => this.selectFood(f, true);
-      }
+    const allFoods = this.plugin.foodStore.getSortedFoods();
+    if (!this.selectedFoodId && allFoods[0]) {
+      this.selectedFoodId = allFoods[0].id;
     }
 
-    const selectRow = this.adderEl.createDiv("my-nt-select-row");
-    const foodSelect = selectRow.createEl("select", {
-      cls: "dropdown my-nt-food-select",
+    // 1. Компактная строка поиска + область результатов (без дублирующего <select>)
+    const searchRow = this.adderEl.createDiv("my-nt-search-row");
+    const searchInput = searchRow.createEl("input", {
+      cls: "my-nt-search-input",
+      attr: {
+        type: "search",
+        placeholder: "🔍 Начни вводить название продукта или выбери из ★ ниже…",
+        value: this.searchQuery,
+      },
     });
-    for (const f of this.plugin.foodStore.getSortedFoods()) {
-      const o = foodSelect.createEl("option", {
-        value: f.id,
-        text: `${f.isFavorite ? "★ " : ""}${f.name} (${f.kcalPer100} ккал / 100 г · Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
-      });
-      if (activeFood && f.id === activeFood.id) o.selected = true;
-    }
-    foodSelect.onchange = () => {
-      const picked = this.plugin.foodStore.findById(foodSelect.value);
-      if (picked) this.selectFood(picked, true);
-      this.focusSafeContainer();
+
+    const resultsHost = this.adderEl.createDiv("my-nt-search-results");
+
+    const renderSearchResults = () => {
+      resultsHost.empty();
+      const q = this.searchQuery.trim();
+      const matches = this.plugin.foodStore.getSortedFoods(q);
+
+      if (q.length === 0) {
+        // Без текста в поиске показываем только компактную полоску избранных (★), до 6 штук
+        const favs = matches.filter((f) => f.isFavorite).slice(0, 6);
+        const listToShow = favs.length > 0 ? favs : matches.slice(0, 5);
+        if (listToShow.length === 0) return;
+
+        const chipsBar = resultsHost.createDiv("my-nt-food-chips");
+        for (const f of listToShow) {
+          const isSelected = f.id === this.selectedFoodId;
+          const chip = chipsBar.createEl("button", {
+            cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
+            text: `${f.isFavorite ? "★ " : ""}${f.name}`,
+            attr: {
+              type: "button",
+              title: `${f.kcalPer100} ккал / 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
+            },
+          });
+          chip.onclick = () => this.selectFood(f, true);
+        }
+        return;
+      }
+
+      // Если пользователь ввёл запрос — показываем компактный список совпадений (до 6 строк)
+      if (matches.length === 0) {
+        const emptyRow = resultsHost.createDiv("my-nt-search-empty");
+        emptyRow.createSpan({
+          text: `По запросу «${q}» ничего не найдено.`,
+        });
+        const createFromQueryBtn = emptyRow.createEl("button", {
+          cls: "my-nt-btn",
+          text: `＋ Создать «${q}»`,
+          attr: { type: "button" },
+        });
+        createFromQueryBtn.onclick = () => {
+          this.isCreateFoodOpen = true;
+          this.editingFoodId = null;
+          this.newFoodDraft = {
+            name: q,
+            kcalPer100: "",
+            proteinPer100: "",
+            fatPer100: "",
+            carbsPer100: "",
+            defaultGrams: "100",
+            isFavorite: true,
+          };
+          this.renderAdder();
+        };
+        return;
+      }
+
+      const listEl = resultsHost.createDiv("my-nt-Suggest-list");
+      for (const f of matches.slice(0, 6)) {
+        const isSelected = f.id === this.selectedFoodId;
+        const itemBtn = listEl.createEl("button", {
+          cls: "my-nt-suggest-item" + (isSelected ? " is-active" : ""),
+          attr: { type: "button" },
+        });
+        itemBtn.createSpan({
+          cls: "my-nt-suggest-name",
+          text: `${f.isFavorite ? "★ " : ""}${f.name}`,
+        });
+        itemBtn.createSpan({
+          cls: "my-nt-suggest-meta",
+          text: `${f.kcalPer100} ккал · Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100}`,
+        });
+        itemBtn.onclick = () => {
+          this.searchQuery = "";
+          this.selectFood(f, true);
+        };
+      }
     };
 
-    if (activeFood) {
-      const favBtn = selectRow.createEl("button", {
-        cls: "my-nt-btn" + (activeFood.isFavorite ? " is-active" : ""),
-        text: activeFood.isFavorite ? "★" : "☆",
-        attr: { type: "button", title: "В избранное / убрать из избранного" },
-      });
-      favBtn.onclick = () => {
-        this.plugin.foodStore.toggleFavorite(activeFood.id);
-        this.renderAdder();
-      };
-
-      const editFoodBtn = selectRow.createEl("button", {
-        cls: "my-nt-btn",
-        text: "✎",
-        attr: { type: "button", title: "Изменить КБЖУ этого продукта в базе" },
-      });
-      editFoodBtn.onclick = () => {
-        this.editingFoodId = activeFood.id;
-        this.isCreateFoodOpen = true;
-        this.newFoodDraft = {
-          name: activeFood.name,
-          kcalPer100: String(activeFood.kcalPer100),
-          proteinPer100: String(activeFood.proteinPer100),
-          fatPer100: String(activeFood.fatPer100),
-          carbsPer100: String(activeFood.carbsPer100),
-          defaultGrams: String(activeFood.defaultGrams || 100),
-          isFavorite: Boolean(activeFood.isFavorite),
-        };
-        this.renderAdder();
-      };
-
-      const isConfirmingDel = this.confirmDeleteFoodId === activeFood.id;
-      const delFoodBtn = selectRow.createEl("button", {
-        cls: "my-nt-btn" + (isConfirmingDel ? " is-danger" : ""),
-        text: isConfirmingDel ? "Удалить?" : "✕",
-        attr: {
-          type: "button",
-          title: "Удалить этот продукт из базы продуктов",
-        },
-      });
-      delFoodBtn.onclick = () => {
-        if (!isConfirmingDel) {
-          this.confirmDeleteFoodId = activeFood.id;
-          this.renderAdder();
-          return;
+    searchInput.oninput = () => {
+      this.searchQuery = searchInput.value;
+      renderSearchResults();
+    };
+    searchInput.onkeydown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        const matches = this.plugin.foodStore.getSortedFoods(this.searchQuery);
+        if (matches[0]) {
+          e.preventDefault();
+          this.searchQuery = "";
+          this.selectFood(matches[0], true);
         }
-        const deletedName = activeFood.name;
-        this.plugin.foodStore.deleteFood(activeFood.id);
-        this.confirmDeleteFoodId = null;
-        const nextFirst = this.plugin.foodStore.getSortedFoods()[0];
-        this.selectedFoodId = nextFirst?.id ?? "";
-        if (nextFirst) {
-          this.gramsInputVal = nextFirst.defaultGrams || 100;
-        }
-        new Notice(`Продукт «${deletedName}» удалён из базы.`);
-        this.renderAdder();
-      };
-    }
+      }
+    };
+
+    renderSearchResults();
+
+    const activeFood =
+      this.plugin.foodStore.findById(this.selectedFoodId) ?? allFoods[0];
 
     if (!activeFood) {
       this.adderEl.createDiv({
         cls: "my-nt-empty",
-        text: "В базе пока нет продуктов. Нажми «＋ Свой продукт в базу» выше.",
+        text: "В базе пока нет продуктов. Нажми «＋ Свой продукт» выше.",
       });
       return;
     }
 
-    // Блок ввода веса строго в граммах (г)
+    // 2. Единая карточка выбранного продукта: заголовок + кнопки (★ / ✎ / ✕) + ввод граммов
     const portionBox = this.adderEl.createDiv("my-nt-portion-box");
+
+    const selectedBar = portionBox.createDiv("my-nt-selected-bar");
+    const selectedInfo = selectedBar.createDiv("my-nt-selected-info");
+    selectedInfo.createSpan({
+      cls: "my-nt-selected-name",
+      text: activeFood.name,
+    });
+    selectedInfo.createSpan({
+      cls: "my-nt-selected-per100",
+      text: `на 100 г: ${activeFood.kcalPer100} ккал (Б:${activeFood.proteinPer100} · Ж:${activeFood.fatPer100} · У:${activeFood.carbsPer100})`,
+    });
+
+    const selectedTools = selectedBar.createDiv("my-nt-selected-tools");
+
+    const favBtn = selectedTools.createEl("button", {
+      cls: "my-nt-icon-btn" + (activeFood.isFavorite ? " is-active" : ""),
+      text: activeFood.isFavorite ? "★" : "☆",
+      attr: {
+        type: "button",
+        title: activeFood.isFavorite
+          ? "Убрать из избранных"
+          : "Добавить в избранные (показывать под строкой поиска)",
+      },
+    });
+    favBtn.onclick = () => {
+      this.plugin.foodStore.toggleFavorite(activeFood.id);
+      this.renderAdder();
+    };
+
+    const editFoodBtn = selectedTools.createEl("button", {
+      cls: "my-nt-icon-btn",
+      text: "✎",
+      attr: { type: "button", title: "Изменить КБЖУ этого продукта" },
+    });
+    editFoodBtn.onclick = () => {
+      this.editingFoodId = activeFood.id;
+      this.isCreateFoodOpen = true;
+      this.newFoodDraft = {
+        name: activeFood.name,
+        kcalPer100: String(activeFood.kcalPer100),
+        proteinPer100: String(activeFood.proteinPer100),
+        fatPer100: String(activeFood.fatPer100),
+        carbsPer100: String(activeFood.carbsPer100),
+        defaultGrams: String(activeFood.defaultGrams || 100),
+        isFavorite: Boolean(activeFood.isFavorite),
+      };
+      this.renderAdder();
+    };
+
+    const isConfirmingDel = this.confirmDeleteFoodId === activeFood.id;
+    const delFoodBtn = selectedTools.createEl("button", {
+      cls: "my-nt-icon-btn" + (isConfirmingDel ? " is-danger" : ""),
+      text: isConfirmingDel ? "Удалить?" : "✕",
+      attr: {
+        type: "button",
+        title: "Удалить продукт из базы",
+      },
+    });
+    delFoodBtn.onclick = () => {
+      if (!isConfirmingDel) {
+        this.confirmDeleteFoodId = activeFood.id;
+        this.renderAdder();
+        return;
+      }
+      const deletedName = activeFood.name;
+      this.plugin.foodStore.deleteFood(activeFood.id);
+      this.confirmDeleteFoodId = null;
+      const nextFirst = this.plugin.foodStore.getSortedFoods()[0];
+      this.selectedFoodId = nextFirst?.id ?? "";
+      if (nextFirst) {
+        this.gramsInputVal = nextFirst.defaultGrams || 100;
+      }
+      new Notice(`Продукт «${deletedName}» удалён из базы.`);
+      this.renderAdder();
+    };
+
+    // Строка расчёта порции в граммах
     const portionTop = portionBox.createDiv("my-nt-portion-top");
     portionTop.createSpan({
       cls: "my-nt-field-caption",
-      text: "Вес порции в граммах (г):",
+      text: "Порция (г):",
     });
 
     const previewEl = portionTop.createSpan({ cls: "my-nt-portion-preview" });
@@ -504,7 +597,7 @@ export class NutritionTrackerModal extends Modal {
         `${effGrams} г → ${calc.kcal} ккал (Б: ${calc.protein} · Ж: ${calc.fat} · У: ${calc.carbs})`
       );
       submitBtn.setText(
-        `＋ Записать в дневник: ${activeFood.name} (${effGrams} г · +${calc.kcal} ккал)`
+        `＋ Записать: ${activeFood.name} (${effGrams} г · +${calc.kcal} ккал)`
       );
     };
 
@@ -579,7 +672,9 @@ export class NutritionTrackerModal extends Modal {
           ...calc,
         });
         this.plugin.foodStore.recordFoodUsage(activeFood.id, effGrams);
-        new Notice(`Добавлено: ${activeFood.name} (${effGrams} г · ${calc.kcal} ккал)`);
+        new Notice(
+          `Добавлено: ${activeFood.name} (${effGrams} г · ${calc.kcal} ккал)`
+        );
         await this.refreshAll();
       } catch (err: unknown) {
         new Notice(
@@ -725,6 +820,7 @@ export class NutritionTrackerModal extends Modal {
 
       this.isCreateFoodOpen = false;
       this.editingFoodId = null;
+      this.searchQuery = "";
       this.selectFood(saved, true);
       new Notice(`Продукт «${saved.name}» сохранён в базу.`);
     };

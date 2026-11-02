@@ -1,6 +1,6 @@
 {
 	"name": "my-nutrition-tracker",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Быстрый учёт калорий и БЖУ за день для системы Здоровье",
 	"main": "main.js",
 	"scripts": {

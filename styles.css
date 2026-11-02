@@ -1,5 +1,5 @@
 /* ============================================================
-   Питание и БЖУ (my-nutrition-tracker v0.1.1)
+   Питание и БЖУ (my-nutrition-tracker v0.1.2)
    Шкала отступов: 4 / 8 / 12 / 16 px
    Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
    ============================================================ */
@@ -16,8 +16,8 @@
   --my-nt-hit: 36px;
 
   position: relative;
-  width: min(760px, 96vw) !important;
-  max-width: 760px !important;
+  width: min(720px, 96vw) !important;
+  max-width: 720px !important;
   max-height: 92vh !important;
   padding: var(--my-nt-s4) !important;
   border-radius: 14px;
@@ -217,7 +217,7 @@
   color: var(--text-normal);
 }
 
-/* ---------- Добавление продукта (только граммы) ---------- */
+/* ---------- Поиск продукта и компактные подсказки ---------- */
 .my-nt-section-head {
   display: flex;
   justify-content: space-between;
@@ -232,6 +232,23 @@
   color: var(--text-normal);
 }
 
+.my-nt-search-row {
+  display: flex;
+  width: 100%;
+}
+
+.my-nt-search-input {
+  width: 100% !important;
+  min-height: var(--my-nt-hit) !important;
+  font-size: var(--my-nt-fs) !important;
+  border-radius: 8px !important;
+}
+
+.my-nt-search-results {
+  display: flex;
+  flex-direction: column;
+}
+
 .my-nt-food-chips {
   display: flex;
   flex-wrap: wrap;
@@ -239,9 +256,9 @@
 }
 
 button.my-nt-food-chip {
-  height: 30px !important;
-  min-height: 30px !important;
-  padding: 0 11px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 10px !important;
   border-radius: 99px !important;
   font-size: var(--my-nt-fs-xs) !important;
   font-weight: 500 !important;
@@ -258,28 +275,138 @@ button.my-nt-food-chip.is-active {
   background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary)) !important;
 }
 
-.my-nt-select-row {
+.my-nt-Suggest-list {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+button.my-nt-suggest-item {
+  width: 100% !important;
+  min-height: 32px !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.my-nt-suggest-item:hover,
+button.my-nt-suggest-item.is-active {
+  background: var(--background-modifier-hover) !important;
+  border-color: var(--interactive-accent) !important;
+}
+
+.my-nt-suggest-name {
+  font-size: var(--my-nt-fs-sm);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-suggest-meta {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-search-empty {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px dashed var(--background-modifier-border);
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
 }
 
-.my-nt-food-select {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: var(--my-nt-hit);
-  font-size: var(--my-nt-fs);
-  font-weight: 500;
-}
-
+/* ---------- Единая карточка выбранного продукта ---------- */
 .my-nt-portion-box {
-  padding: var(--my-nt-s2) var(--my-nt-s3);
+  padding: 10px 12px;
   border-radius: 10px;
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   display: flex;
   flex-direction: column;
   gap: var(--my-nt-s2);
+}
+
+.my-nt-selected-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-nt-s2);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.my-nt-selected-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.my-nt-selected-name {
+  font-size: var(--my-nt-fs);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-nt-selected-per100 {
+  font-size: var(--my-nt-fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-nt-selected-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+button.my-nt-icon-btn {
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: var(--my-nt-fs-sm) !important;
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-nt-icon-btn:hover {
+  color: var(--text-normal) !important;
+  border-color: var(--text-faint) !important;
+}
+
+button.my-nt-icon-btn.is-active {
+  color: var(--color-orange, #e5a158) !important;
+  border-color: color-mix(in srgb, var(--color-orange, #e5a158) 50%, var(--background-modifier-border)) !important;
+}
+
+button.my-nt-icon-btn.is-danger {
+  color: var(--text-error, #e06c75) !important;
+  border-color: var(--text-error, #e06c75) !important;
+  font-size: var(--my-nt-fs-xs) !important;
+  font-weight: 600 !important;
 }
 
 .my-nt-portion-top {
@@ -519,8 +646,9 @@ button.my-nt-meal-del:hover {
   }
 
   button.my-nt-food-chip,
-  button.my-nt-btn {
-    height: 38px !important;
+  button.my-nt-btn,
+  button.my-nt-icon-btn,
+  button.my-nt-suggest-item {
     min-height: 38px !important;
     padding: 0 12px !important;
   }
