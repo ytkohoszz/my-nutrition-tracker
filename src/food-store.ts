@@ -59,6 +59,7 @@ export class FoodCatalogStore {
   private dbPath: string;
   private foods: FoodItem[] = cloneDefaultFoods();
   private saveTimer: number | null = null;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(app: App, dbPath: string) {
     this.app = app;
@@ -77,7 +78,8 @@ export class FoodCatalogStore {
     return this.dbPath;
   }
 
-  async load(): Promise<void> {
+async load(): Promise<void> {
+    await this.flushAsync();
     const existing = this.app.vault.getAbstractFileByPath(this.dbPath);
     if (existing instanceof TFile) {
       try {
@@ -200,30 +202,42 @@ export class FoodCatalogStore {
     }, 200);
   }
 
-  async saveNow(): Promise<void> {
-    try {
-      await ensureParentFolder(this.app, this.dbPath);
-      const payload: FoodCatalogFileData = {
-        version: 2,
-        foods: this.foods,
-      };
-      const jsonText = JSON.stringify(payload, null, 2);
-      const existing = this.app.vault.getAbstractFileByPath(this.dbPath);
-      if (existing instanceof TFile) {
-        await this.app.vault.modify(existing, jsonText);
-      } else {
-        await this.app.vault.create(this.dbPath, jsonText);
+async saveNow(): Promise<void> {
+    const payload: FoodCatalogFileData = {
+      version: 2,
+      foods: this.foods.map((f) => ({ ...f })),
+    };
+    const jsonText = JSON.stringify(payload, null, 2);
+    const targetPath = this.dbPath;
+
+    const write = this.writeQueue.then(async () => {
+      try {
+        await ensureParentFolder(this.app, targetPath);
+        const existing = this.app.vault.getAbstractFileByPath(targetPath);
+        if (existing instanceof TFile) {
+          await this.app.vault.modify(existing, jsonText);
+        } else {
+          await this.app.vault.create(targetPath, jsonText);
+        }
+      } catch {
+        // игнорируем ошибки записи
       }
-    } catch {
-      // игнорируем ошибки записи
+    });
+    this.writeQueue = write;
+    await write;
+  }
+
+  async flushAsync(): Promise<void> {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      await this.saveNow();
+    } else {
+      await this.writeQueue;
     }
   }
 
   flush(): void {
-    if (this.saveTimer !== null) {
-      window.clearTimeout(this.saveTimer);
-      this.saveTimer = null;
-      void this.saveNow();
-    }
+    void this.flushAsync();
   }
 }

@@ -34,9 +34,10 @@ export class NutritionTrackerModal extends Modal {
   private selectedFoodId = "";
   private gramsInputVal = 100;
 
-  private isEditingGoal = false;
+private isEditingGoal = false;
   private goalDraftStr = "";
   private confirmDeleteFoodId: string | null = null;
+  private isDeletingMeal = false;
 
   private isCreateFoodOpen = false;
   private editingFoodId: string | null = null;
@@ -170,28 +171,29 @@ export class NutritionTrackerModal extends Modal {
     this.renderLoggedMeals(loggedEntries, diaryFile);
   }
 
-  private renderHeader(diaryFile: ReturnType<typeof findDiaryFileForDate>): void {
+private renderHeader(diaryFile: ReturnType<typeof findDiaryFileForDate>): void {
     this.headerEl.empty();
 
     const topRow = this.headerEl.createDiv("my-nt-top-row");
-    const titleWrap = topRow.createDiv();
-    titleWrap.createDiv({
+    const titleWrap = topRow.createDiv("my-nt-title-wrap");
+    titleWrap.createSpan({
       cls: "my-nt-title",
-      text: `🥗 Питание и БЖУ · ${formatDateRu(this.dateISO)}`,
+      text: "Питание",
     });
-    titleWrap.createDiv({
-      cls: "my-nt-subtitle",
-      text: diaryFile
-        ? `Запись в ${diaryFile.path}`
-        : `При первом добавлении будет создана заметка за ${this.dateISO}`,
+    titleWrap.createSpan({
+      cls: "my-nt-date",
+      text: formatDateRu(this.dateISO),
     });
 
     if (diaryFile) {
       const openBtn = topRow.createEl("button", {
-        cls: "my-nt-btn",
-        text: "📄 Дневник",
-        attr: { type: "button", title: "Открыть заметку ежедневника" },
+        cls: "my-nt-icon-btn my-nt-diary-btn",
+        attr: {
+          type: "button",
+          title: `Открыть дневник (${diaryFile.path})`,
+        },
       });
+      setIcon(openBtn, "book-open");
       openBtn.onclick = () => {
         this.close();
         void this.app.workspace.openLinkText(diaryFile.path, "", false);
@@ -211,49 +213,38 @@ export class NutritionTrackerModal extends Modal {
       typeof rawGoal === "number" && rawGoal > 0 ? Math.round(rawGoal) : null;
     const isGoalReached = goal !== null && totals.kcal >= goal;
 
-    const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
-    const leftKcal = kcalRow.createDiv();
+const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
+    const leftKcal = kcalRow.createDiv("my-nt-kcal-main");
     leftKcal.createSpan({
       cls: "my-nt-kcal-big" + (isGoalReached ? " is-done" : ""),
-      text: `${totals.kcal} ккал`,
+      text: String(totals.kcal),
+    });
+    leftKcal.createSpan({
+      cls: "my-nt-kcal-unit",
+      text: "ккал",
     });
 
-    if (goal !== null) {
-      const pct = Math.min(100, Math.round((totals.kcal / goal) * 100));
-      leftKcal.createSpan({
-        cls: "my-nt-kcal-goal",
-        text: ` из ${goal} ккал (${pct}%)`,
-      });
-    } else {
-      leftKcal.createSpan({
-        cls: "my-nt-kcal-goal",
-        text: " · без дневной цели",
-      });
-    }
-
-    const rightControls = kcalRow.createDiv("my-nt-goal-controls");
-    if (goal !== null) {
-      rightControls.createSpan({
-        cls: "my-nt-diet-badge" + (isGoalReached ? " is-done" : ""),
-        text: isGoalReached
-          ? `✓ Диета закрыта (≥${goal})`
-          : `Осталось: ${Math.max(0, goal - totals.kcal)} ккал`,
-      });
-    }
-
-    const editGoalBtn = rightControls.createEl("button", {
-      cls: "my-nt-btn" + (this.isEditingGoal ? " is-active" : ""),
-      text: goal !== null ? "✎ Цель" : "＋ Задать цель",
+    const goalTrigger = leftKcal.createEl("button", {
+      cls: "my-nt-goal-trigger" + (this.isEditingGoal ? " is-active" : ""),
+      text: goal !== null ? `/ ${goal}` : "+ цель",
       attr: {
         type: "button",
-        title: "Изменить или удалить дневную цель калорий",
+        title: "Нажмите, чтобы изменить дневную цель",
       },
     });
-    editGoalBtn.onclick = () => {
+    goalTrigger.onclick = () => {
       this.isEditingGoal = !this.isEditingGoal;
       this.goalDraftStr = goal !== null ? String(goal) : "2600";
       this.renderSummary(totals, diaryFile, loggedEntries);
     };
+
+    if (goal !== null) {
+      const remaining = Math.max(0, goal - totals.kcal);
+      kcalRow.createSpan({
+        cls: "my-nt-diet-status" + (isGoalReached ? " is-done" : ""),
+        text: isGoalReached ? "✓ цель закрыта" : `ещё ${remaining}`,
+      });
+    }
 
     if (this.isEditingGoal) {
       const goalDrawer = this.summaryEl.createDiv("my-nt-goal-drawer");
@@ -277,12 +268,7 @@ export class NutritionTrackerModal extends Modal {
         this.goalDraftStr = gInp.value;
       };
 
-      const saveGoalBtn = goalDrawer.createEl("button", {
-        cls: "mod-cta my-nt-btn",
-        text: "✓ Сохранить цель",
-        attr: { type: "button" },
-      });
-      saveGoalBtn.onclick = async () => {
+const doSaveGoal = async () => {
         const parsed = Math.round(Number(this.goalDraftStr.trim()));
         if (!Number.isFinite(parsed) || parsed <= 0) {
           new Notice("Введи число больше 0 или нажми «Убрать цель».");
@@ -303,6 +289,20 @@ export class NutritionTrackerModal extends Modal {
         new Notice(`Дневная цель: ${parsed} ккал`);
         await this.refreshAll();
       };
+
+      gInp.onkeydown = (e: KeyboardEvent) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void doSaveGoal();
+        }
+      };
+
+      const saveGoalBtn = goalDrawer.createEl("button", {
+        cls: "mod-cta my-nt-btn",
+        text: "✓ Сохранить цель",
+        attr: { type: "button" },
+      });
+      saveGoalBtn.onclick = () => void doSaveGoal();
 
       if (goal !== null) {
         const removeGoalBtn = goalDrawer.createEl("button", {
@@ -340,20 +340,32 @@ export class NutritionTrackerModal extends Modal {
     addMacroPill("Углеводы", totals.carbs);
   }
 
-  private renderAdder(): void {
+private renderAdder(): void {
     this.adderEl.empty();
 
-    const head = this.adderEl.createDiv("my-nt-section-head");
-    head.createSpan({
-      cls: "my-nt-section-title",
-      text: "Добавить продукт или блюдо",
+    const allFoods = this.plugin.foodStore.getSortedFoods();
+    if (!this.selectedFoodId && allFoods[0]) {
+      this.selectedFoodId = allFoods[0].id;
+    }
+
+    const searchRow = this.adderEl.createDiv("my-nt-search-row");
+    const searchInput = searchRow.createEl("input", {
+      cls: "my-nt-search-input",
+      attr: {
+        type: "search",
+        placeholder: "Поиск продукта…",
+        value: this.searchQuery,
+      },
     });
 
-    const newFoodBtn = head.createEl("button", {
-      cls: "my-nt-btn" + (this.isCreateFoodOpen ? " is-active" : ""),
-      text: this.isCreateFoodOpen ? "✕ Закрыть форму" : "＋ Свой продукт",
-      attr: { type: "button" },
+    const newFoodBtn = searchRow.createEl("button", {
+      cls: "my-nt-icon-btn my-nt-add-food-btn" + (this.isCreateFoodOpen ? " is-active" : ""),
+      attr: {
+        type: "button",
+        title: this.isCreateFoodOpen ? "Закрыть форму" : "Добавить свой продукт",
+      },
     });
+    setIcon(newFoodBtn, this.isCreateFoodOpen ? "x" : "plus");
     newFoodBtn.onclick = () => {
       this.isCreateFoodOpen = !this.isCreateFoodOpen;
       this.editingFoodId = null;
@@ -373,21 +385,6 @@ export class NutritionTrackerModal extends Modal {
       this.renderCreateFoodDrawer();
     }
 
-    const allFoods = this.plugin.foodStore.getSortedFoods();
-    if (!this.selectedFoodId && allFoods[0]) {
-      this.selectedFoodId = allFoods[0].id;
-    }
-
-    const searchRow = this.adderEl.createDiv("my-nt-search-row");
-    const searchInput = searchRow.createEl("input", {
-      cls: "my-nt-search-input",
-      attr: {
-        type: "search",
-        placeholder: "🔍 Начни вводить название продукта или выбери из ★ ниже…",
-        value: this.searchQuery,
-      },
-    });
-
     const resultsHost = this.adderEl.createDiv("my-nt-search-results");
 
     const renderSearchResults = () => {
@@ -395,9 +392,9 @@ export class NutritionTrackerModal extends Modal {
       const q = this.searchQuery.trim();
       const matches = this.plugin.foodStore.getSortedFoods(q);
 
-      if (q.length === 0) {
-        const favs = matches.filter((f) => f.isFavorite).slice(0, 6);
-        const listToShow = favs.length > 0 ? favs : matches.slice(0, 5);
+if (q.length === 0) {
+        const favs = matches.filter((f) => f.isFavorite).slice(0, 12);
+        const listToShow = favs.length > 0 ? favs : matches.slice(0, 8);
         if (listToShow.length === 0) return;
 
         const chipsBar = resultsHost.createDiv("my-nt-food-chips");
@@ -405,7 +402,7 @@ export class NutritionTrackerModal extends Modal {
           const isSelected = f.id === this.selectedFoodId;
           const chip = chipsBar.createEl("button", {
             cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
-            text: `${f.isFavorite ? "★ " : ""}${f.name}`,
+            text: f.name,
             attr: {
               type: "button",
               title: `${f.kcalPer100} ккал / 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
@@ -496,7 +493,7 @@ export class NutritionTrackerModal extends Modal {
     // Единая компактная карточка выбранного продукта с одним полем ввода граммов
     const portionBox = this.adderEl.createDiv("my-nt-portion-box");
 
-    const selectedBar = portionBox.createDiv("my-nt-selected-bar");
+const selectedBar = portionBox.createDiv("my-nt-selected-bar");
     const selectedInfo = selectedBar.createDiv("my-nt-selected-info");
     selectedInfo.createSpan({
       cls: "my-nt-selected-name",
@@ -504,14 +501,13 @@ export class NutritionTrackerModal extends Modal {
     });
     selectedInfo.createSpan({
       cls: "my-nt-selected-per100",
-      text: `на 100 г: ${activeFood.kcalPer100} ккал (Б:${activeFood.proteinPer100} · Ж:${activeFood.fatPer100} · У:${activeFood.carbsPer100})`,
+      text: `${activeFood.kcalPer100} ккал / 100 г · Б ${activeFood.proteinPer100} · Ж ${activeFood.fatPer100} · У ${activeFood.carbsPer100}`,
     });
 
     const selectedTools = selectedBar.createDiv("my-nt-selected-tools");
 
     const favBtn = selectedTools.createEl("button", {
-      cls: "my-nt-icon-btn" + (activeFood.isFavorite ? " is-active" : ""),
-      text: activeFood.isFavorite ? "★" : "☆",
+      cls: "my-nt-icon-btn my-nt-fav-btn" + (activeFood.isFavorite ? " is-active" : ""),
       attr: {
         type: "button",
         title: activeFood.isFavorite
@@ -519,6 +515,7 @@ export class NutritionTrackerModal extends Modal {
           : "Добавить в избранные",
       },
     });
+    setIcon(favBtn, "star");
     favBtn.onclick = () => {
       this.plugin.foodStore.toggleFavorite(activeFood.id);
       this.renderAdder();
@@ -526,9 +523,9 @@ export class NutritionTrackerModal extends Modal {
 
     const editFoodBtn = selectedTools.createEl("button", {
       cls: "my-nt-icon-btn",
-      text: "✎",
       attr: { type: "button", title: "Изменить КБЖУ этого продукта" },
     });
+    setIcon(editFoodBtn, "pencil");
     editFoodBtn.onclick = () => {
       this.editingFoodId = activeFood.id;
       this.isCreateFoodOpen = true;
@@ -547,12 +544,15 @@ export class NutritionTrackerModal extends Modal {
     const isConfirmingDel = this.confirmDeleteFoodId === activeFood.id;
     const delFoodBtn = selectedTools.createEl("button", {
       cls: "my-nt-icon-btn" + (isConfirmingDel ? " is-danger" : ""),
-      text: isConfirmingDel ? "Удалить?" : "✕",
+      text: isConfirmingDel ? "Удалить?" : "",
       attr: {
         type: "button",
         title: "Удалить продукт из базы",
       },
     });
+    if (!isConfirmingDel) {
+      setIcon(delFoodBtn, "trash-2");
+    }
     delFoodBtn.onclick = () => {
       if (!isConfirmingDel) {
         this.confirmDeleteFoodId = activeFood.id;
@@ -571,25 +571,21 @@ export class NutritionTrackerModal extends Modal {
       this.renderAdder();
     };
 
-    // Одна чистая строка: поле ввода граммов слева + расчёт КБЖУ справа (без кнопок шагов и пресетов)
-    const gramLine = portionBox.createDiv("my-nt-gram-line");
-    const gramLeft = gramLine.createEl("label", { cls: "my-nt-gram-label" });
-    gramLeft.createSpan({
-      cls: "my-nt-field-caption",
-      text: "Съедено (г):",
-    });
+const gramLine = portionBox.createDiv("my-nt-gram-line");
+    const gramPill = gramLine.createEl("label", { cls: "my-nt-gram-pill" });
 
-    const gInp = gramLeft.createEl("input", {
+    const gInp = gramPill.createEl("input", {
       cls: "my-nt-step-input",
       attr: {
         type: "number",
         inputmode: "decimal",
         min: "1",
-        placeholder: "Граммы…",
+        placeholder: "100",
         value: String(this.gramsInputVal),
       },
     });
     gInp.onfocus = () => gInp.select();
+    gramPill.createSpan({ cls: "my-nt-gram-unit", text: "г" });
 
     const previewEl = gramLine.createSpan({ cls: "my-nt-portion-preview" });
     const submitBtn = this.adderEl.createEl("button", {
@@ -601,11 +597,9 @@ export class NutritionTrackerModal extends Modal {
       const effGrams = round1(Math.max(0, this.gramsInputVal || 0));
       const calc = this.calculatePortionMacros(activeFood, effGrams);
       previewEl.setText(
-        `${effGrams} г → ${calc.kcal} ккал (Б: ${calc.protein} · Ж: ${calc.fat} · У: ${calc.carbs})`
+        `Б ${calc.protein} · Ж ${calc.fat} · У ${calc.carbs}`
       );
-      submitBtn.setText(
-        `＋ Записать: ${activeFood.name} (${effGrams} г · +${calc.kcal} ккал)`
-      );
+      submitBtn.setText(`Добавить · +${calc.kcal} ккал`);
     };
 
     gInp.oninput = () => {
@@ -777,7 +771,7 @@ export class NutritionTrackerModal extends Modal {
       const defG =
         Number(this.newFoodDraft.defaultGrams.replace(",", ".")) || 100;
 
-      const saved = this.plugin.foodStore.upsertFood({
+const saved = this.plugin.foodStore.upsertFood({
         id: this.editingFoodId ?? undefined,
         name,
         kcalPer100: kcal,
@@ -785,7 +779,7 @@ export class NutritionTrackerModal extends Modal {
         fatPer100: f,
         carbsPer100: c,
         defaultGrams: defG > 0 ? defG : 100,
-        isFavorite: true,
+        isFavorite: Boolean(this.newFoodDraft.isFavorite),
       });
 
       this.isCreateFoodOpen = false;
@@ -802,10 +796,10 @@ export class NutritionTrackerModal extends Modal {
   ): void {
     this.logEl.empty();
 
-    const head = this.logEl.createDiv("my-nt-section-head");
+const head = this.logEl.createDiv("my-nt-section-head");
     head.createSpan({
       cls: "my-nt-section-title",
-      text: `Съедено за день · ${entries.length}`,
+      text: entries.length > 0 ? `Съедено · ${entries.length}` : "Съедено",
     });
 
     if (entries.length === 0) {
@@ -844,15 +838,21 @@ export class NutritionTrackerModal extends Modal {
         attr: { type: "button", title: "Удалить приём пищи" },
       });
       setIcon(delBtn, "x");
-      delBtn.onclick = async () => {
+delBtn.onclick = async () => {
+        if (this.isDeletingMeal) return;
+        this.isDeletingMeal = true;
         delBtn.disabled = true;
-        await deleteMealFromDiary(
-          this.app,
-          this.plugin.settings,
-          this.dateISO,
-          e.lineIndex
-        );
-        await this.refreshAll();
+        try {
+          await deleteMealFromDiary(
+            this.app,
+            this.plugin.settings,
+            this.dateISO,
+            e.lineIndex
+          );
+          await this.refreshAll();
+        } finally {
+          this.isDeletingMeal = false;
+        }
       };
     });
   }

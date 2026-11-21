@@ -147,10 +147,11 @@ export default class MyNutritionTrackerPlugin extends Plugin {
     }, 250);
   }
 
-  onunload() {
+onunload() {
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
+      void this.saveData(this.settings);
     }
     this.foodStore?.flush();
   }
