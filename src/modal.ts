@@ -392,26 +392,7 @@ private renderAdder(): void {
       const q = this.searchQuery.trim();
       const matches = this.plugin.foodStore.getSortedFoods(q);
 
-if (q.length === 0) {
-        const favs = matches.filter((f) => f.isFavorite).slice(0, 12);
-        const listToShow = favs.length > 0 ? favs : matches.slice(0, 8);
-        if (listToShow.length === 0) return;
-
-        const chipsBar = resultsHost.createDiv("my-nt-food-chips");
-        for (const f of listToShow) {
-          const isSelected = f.id === this.selectedFoodId;
-          const chip = chipsBar.createEl("button", {
-            cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
-            text: f.name,
-            attr: {
-              type: "button",
-              title: `${f.kcalPer100} ккал / 100 г (Б:${f.proteinPer100} Ж:${f.fatPer100} У:${f.carbsPer100})`,
-            },
-          });
-          chip.onclick = () => this.selectFood(f, true);
-        }
-        return;
-      }
+if (q.length === 0) return;
 
       if (matches.length === 0) {
         const emptyRow = resultsHost.createDiv("my-nt-search-empty");
