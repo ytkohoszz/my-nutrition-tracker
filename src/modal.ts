@@ -242,7 +242,7 @@ const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
       const remaining = Math.max(0, goal - totals.kcal);
       kcalRow.createSpan({
         cls: "my-nt-diet-status" + (isGoalReached ? " is-done" : ""),
-        text: isGoalReached ? "✓ цель закрыта" : `ещё ${remaining}`,
+        text: isGoalReached ? "Цель закрыта" : `ещё ${remaining}`,
       });
     }
 
@@ -299,7 +299,7 @@ const doSaveGoal = async () => {
 
       const saveGoalBtn = goalDrawer.createEl("button", {
         cls: "mod-cta my-nt-btn",
-        text: "✓ Сохранить цель",
+        text: "Сохранить",
         attr: { type: "button" },
       });
       saveGoalBtn.onclick = () => void doSaveGoal();
@@ -307,7 +307,7 @@ const doSaveGoal = async () => {
       if (goal !== null) {
         const removeGoalBtn = goalDrawer.createEl("button", {
           cls: "my-nt-btn is-danger",
-          text: "✕ Убрать цель совсем",
+          text: "Убрать цель",
           attr: { type: "button" },
         });
         removeGoalBtn.onclick = async () => {
@@ -792,45 +792,38 @@ const saved = this.plugin.foodStore.upsertFood({
 
   private renderLoggedMeals(
     entries: LoggedMealEntry[],
-    diaryFile: ReturnType<typeof findDiaryFileForDate>
+    _diaryFile: ReturnType<typeof findDiaryFileForDate>
   ): void {
     this.logEl.empty();
 
-const head = this.logEl.createDiv("my-nt-section-head");
+    const head = this.logEl.createDiv("my-nt-section-head");
     head.createSpan({
       cls: "my-nt-section-title",
       text: entries.length > 0 ? `Съедено · ${entries.length}` : "Съедено",
     });
 
-    if (entries.length === 0) {
-      this.logEl.createDiv({
-        cls: "my-nt-empty",
-        text: diaryFile
-          ? "В разделе «## Питание» за сегодня пока нет записей."
-          : "Записей за сегодня пока нет.",
-      });
-      return;
-    }
+    if (entries.length === 0) return;
 
     const listEl = this.logEl.createDiv("my-nt-meals-list");
     entries.forEach((e) => {
       const row = listEl.createDiv("my-nt-meal-row");
 
-      const left = row.createDiv("my-nt-meal-left");
-      if (e.timeStr) {
-        left.createSpan({ cls: "my-nt-meal-time", text: e.timeStr });
-      }
-      left.createSpan({ cls: "my-nt-meal-name", text: e.name });
-      left.createSpan({ cls: "my-nt-meal-amount", text: `${e.grams} г` });
+      row.createSpan({
+        cls: "my-nt-meal-time",
+        text: e.timeStr || "—",
+      });
+
+      const main = row.createDiv("my-nt-meal-main");
+      main.createDiv({ cls: "my-nt-meal-name", text: e.name });
+      main.createDiv({
+        cls: "my-nt-meal-sub",
+        text: `${e.grams} г · Б ${e.protein} · Ж ${e.fat} · У ${e.carbs}`,
+      });
 
       const right = row.createDiv("my-nt-meal-right");
       right.createSpan({
         cls: "my-nt-meal-kcal",
         text: `${e.kcal} ккал`,
-      });
-      right.createSpan({
-        cls: "my-nt-meal-macros",
-        text: `Б:${e.protein} Ж:${e.fat} У:${e.carbs}`,
       });
 
       const delBtn = right.createEl("button", {
