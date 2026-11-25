@@ -52,12 +52,15 @@ export interface NutritionPluginSettings {
   foodDbPath: string;
   /** null или 0 означает, что цель отключена (считается только факт) */
   dailyCalorieGoal: number | null;
+  /** Порог в % от дневной цели для автопроставления диета: true (50–100, по умолчанию 95) */
+  dietThresholdPercent: number;
 }
 
 export const DEFAULT_SETTINGS: NutritionPluginSettings = {
   diaryFolder: "Ежедневник",
   foodDbPath: "Знания/База продуктов.json",
   dailyCalorieGoal: 2600,
+  dietThresholdPercent: 95,
 };
 
 export function makeFoodId(): string {

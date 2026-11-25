@@ -268,10 +268,22 @@
 }
 
 .my-nt-progress-track {
+  position: relative;
   height: 4px;
   border-radius: var(--radius-l, 18px);
   background: var(--trans-faint-15, var(--background-modifier-border));
   overflow: hidden;
+}
+
+.my-nt-progress-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background: var(--background-primary);
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .my-nt-progress-fill {
@@ -380,6 +392,10 @@
 
 .my-nt-modal button.my-nt-food-chip {
   flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   height: 30px !important;
   min-height: 30px !important;
   padding: 0 12px !important;

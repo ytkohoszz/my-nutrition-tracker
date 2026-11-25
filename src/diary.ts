@@ -259,6 +259,25 @@ export function formatMealMarkdownLine(entry: {
   return `- ${entry.timeStr} · ${entry.name} · ${round1(entry.grams)} г · ${Math.round(entry.kcal)} ккал · Б: ${round1(entry.protein)} · Ж: ${round1(entry.fat)} · У: ${round1(entry.carbs)}`;
 }
 
+export function getDietThresholdPercent(
+  settings: Pick<NutritionPluginSettings, "dietThresholdPercent">
+): number {
+  const raw = settings.dietThresholdPercent;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return 95;
+  return Math.min(100, Math.max(50, Math.round(raw)));
+}
+
+export function getDietThresholdKcal(
+  goal: number | null | undefined,
+  thresholdPercent = 95
+): number | null {
+  if (typeof goal !== "number" || !Number.isFinite(goal) || goal <= 0) {
+    return null;
+  }
+  const pct = Math.min(100, Math.max(50, Math.round(thresholdPercent)));
+  return Math.round((goal * pct) / 100);
+}
+
 export async function syncMacrosToDiaryFrontmatter(
   app: App,
   settings: NutritionPluginSettings,
@@ -277,6 +296,10 @@ export async function syncMacrosToDiaryFrontmatter(
     settings.dailyCalorieGoal > 0
       ? settings.dailyCalorieGoal
       : null;
+  const thresholdKcal = getDietThresholdKcal(
+    goal,
+    getDietThresholdPercent(settings)
+  );
 
   if (goal !== null) {
     clearManualHabitOverrideForDate(dateISO, DIARY_KEYS.dietFlag);
@@ -298,8 +321,8 @@ export async function syncMacrosToDiaryFrontmatter(
         fm[DIARY_KEYS.proteinG] = totals.protein;
         fm[DIARY_KEYS.fatG] = totals.fat;
         fm[DIARY_KEYS.carbsG] = totals.carbs;
-        if (goal !== null) {
-          fm[DIARY_KEYS.dietFlag] = totals.kcal >= goal;
+        if (thresholdKcal !== null) {
+          fm[DIARY_KEYS.dietFlag] = totals.kcal >= thresholdKcal;
         }
       }
     }

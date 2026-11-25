@@ -20,6 +20,17 @@ function migrateSettings(raw: unknown): NutritionPluginSettings {
     goal = Math.round(s.dailyCalorieGoal);
   }
 
+  let thresholdPercent = DEFAULT_SETTINGS.dietThresholdPercent;
+  if (
+    typeof s.dietThresholdPercent === "number" &&
+    Number.isFinite(s.dietThresholdPercent)
+  ) {
+    thresholdPercent = Math.min(
+      100,
+      Math.max(50, Math.round(s.dietThresholdPercent))
+    );
+  }
+
   return {
     diaryFolder:
       typeof s.diaryFolder === "string" && s.diaryFolder.trim()
@@ -30,6 +41,7 @@ function migrateSettings(raw: unknown): NutritionPluginSettings {
         ? s.foodDbPath.trim()
         : DEFAULT_SETTINGS.foodDbPath,
     dailyCalorieGoal: goal,
+    dietThresholdPercent: thresholdPercent,
   };
 }
 
@@ -49,7 +61,7 @@ class NutritionTrackerSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Дневная цель калорий (необязательно)")
       .setDesc(
-        "Оставь поле пустым, чтобы отключить цель и считать только факт. Если цель задана (по умолчанию 2600), при её достижении в ежедневнике ставится «диета: true»"
+        "Оставь поле пустым, чтобы отключить цель и считать только факт. При достижении порога ниже в ежедневнике ставится «диета: true»"
       )
       .addText((text) =>
         text
@@ -69,6 +81,24 @@ class NutritionTrackerSettingTab extends PluginSettingTab {
             const n = Math.round(Number(clean));
             if (Number.isFinite(n) && n > 0 && n <= 15000) {
               this.plugin.settings.dailyCalorieGoal = n;
+              this.plugin.requestSaveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Мягкий порог зачёта «диета» (%)")
+      .setDesc(
+        "Процент от дневной цели (50–100%, по умолчанию 95%), при котором автоматически ставится «диета: true»"
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("95")
+          .setValue(String(this.plugin.settings.dietThresholdPercent))
+          .onChange((val) => {
+            const n = Math.round(Number(val.trim()));
+            if (Number.isFinite(n) && n >= 50 && n <= 100) {
+              this.plugin.settings.dietThresholdPercent = n;
               this.plugin.requestSaveSettings();
             }
           })

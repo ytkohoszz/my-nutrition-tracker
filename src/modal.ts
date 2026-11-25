@@ -11,11 +11,15 @@ import {
   deleteMealFromDiary,
   findDiaryFileForDate,
   formatDateRu,
+  getDietThresholdKcal,
+  getDietThresholdPercent,
   parseMealsFromDiaryContent,
   sumDailyMacros,
   syncMacrosToDiaryFrontmatter,
   todayLocalISO,
 } from "./diary";
+
+const QUICK_CHIPS_LIMIT = 8;
 
 export interface OpenNutritionOptions {
   dateISO?: string;
@@ -211,12 +215,16 @@ private renderHeader(diaryFile: ReturnType<typeof findDiaryFileForDate>): void {
     const rawGoal = this.plugin.settings.dailyCalorieGoal;
     const goal =
       typeof rawGoal === "number" && rawGoal > 0 ? Math.round(rawGoal) : null;
-    const isGoalReached = goal !== null && totals.kcal >= goal;
+    const thresholdPercent = getDietThresholdPercent(this.plugin.settings);
+    const thresholdKcal = getDietThresholdKcal(goal, thresholdPercent);
+    const isFullGoalReached = goal !== null && totals.kcal >= goal;
+    const isDietDone =
+      thresholdKcal !== null && totals.kcal >= thresholdKcal;
 
-const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
+    const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
     const leftKcal = kcalRow.createDiv("my-nt-kcal-main");
     leftKcal.createSpan({
-      cls: "my-nt-kcal-big" + (isGoalReached ? " is-done" : ""),
+      cls: "my-nt-kcal-big" + (isDietDone ? " is-done" : ""),
       text: String(totals.kcal),
     });
     leftKcal.createSpan({
@@ -238,11 +246,25 @@ const kcalRow = this.summaryEl.createDiv("my-nt-kcal-row");
       this.renderSummary(totals, diaryFile, loggedEntries);
     };
 
-    if (goal !== null) {
-      const remaining = Math.max(0, goal - totals.kcal);
+    if (goal !== null && thresholdKcal !== null) {
+      const toGoal = Math.max(0, goal - totals.kcal);
+      let statusText: string;
+      if (isFullGoalReached) {
+        statusText = "Цель закрыта";
+      } else if (isDietDone) {
+        statusText = `Диета зачтена · ещё ${toGoal}`;
+      } else if (thresholdKcal < goal) {
+        statusText = `ещё ${toGoal} · зачёт от ${thresholdKcal}`;
+      } else {
+        statusText = `ещё ${toGoal}`;
+      }
+
       kcalRow.createSpan({
-        cls: "my-nt-diet-status" + (isGoalReached ? " is-done" : ""),
-        text: isGoalReached ? "Цель закрыта" : `ещё ${remaining}`,
+        cls: "my-nt-diet-status" + (isDietDone ? " is-done" : ""),
+        text: statusText,
+        attr: {
+          title: `Порог автозачёта «диета: true» — ${thresholdPercent}% (${thresholdKcal} ккал)`,
+        },
       });
     }
 
@@ -324,9 +346,14 @@ const doSaveGoal = async () => {
       const pct = Math.min(100, Math.round((totals.kcal / goal) * 100));
       const track = this.summaryEl.createDiv("my-nt-progress-track");
       const fill = track.createDiv(
-        "my-nt-progress-fill" + (isGoalReached ? " is-done" : "")
+        "my-nt-progress-fill" + (isDietDone ? " is-done" : "")
       );
       fill.style.width = `${pct}%`;
+
+      if (thresholdPercent < 100) {
+        const mark = track.createDiv("my-nt-progress-mark");
+        mark.style.left = `${thresholdPercent}%`;
+      }
     }
 
     const macrosGrid = this.summaryEl.createDiv("my-nt-macros-grid");
@@ -392,7 +419,27 @@ private renderAdder(): void {
       const q = this.searchQuery.trim();
       const matches = this.plugin.foodStore.getSortedFoods(q);
 
-if (q.length === 0) return;
+      if (q.length === 0) {
+        const quickFoods = matches.slice(0, QUICK_CHIPS_LIMIT);
+        if (quickFoods.length === 0) return;
+
+        const chipsEl = resultsHost.createDiv("my-nt-food-chips");
+        for (const f of quickFoods) {
+          const isSelected = f.id === this.selectedFoodId;
+          const chipBtn = chipsEl.createEl("button", {
+            cls: "my-nt-food-chip" + (isSelected ? " is-active" : ""),
+            text: f.name,
+            attr: {
+              type: "button",
+              title: `${f.name} · ${f.defaultGrams || 100} г · ${f.kcalPer100} ккал / 100 г`,
+            },
+          });
+          chipBtn.onclick = () => {
+            this.selectFood(f, true);
+          };
+        }
+        return;
+      }
 
       if (matches.length === 0) {
         const emptyRow = resultsHost.createDiv("my-nt-search-empty");
